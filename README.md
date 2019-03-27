@@ -98,7 +98,8 @@ Downloading mydir/teste11 to dir '.' Done.
 ```
 
 ```console
-$ ./s3_client.py  -e https://s3.amazonaws.com download my_bucket -f mydir/teste11 -l /tmp/Downloading mydir/teste11 to dir '/tmp/' Done.
+$ ./s3_client.py  -e https://s3.amazonaws.com download my_bucket -f mydir/teste11 -l /tmp/
+Downloading mydir/teste11 to dir '/tmp/' Done.
 $
 $ ls  /tmp/mydir/teste11
 /tmp/mydir/teste11
