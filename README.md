@@ -9,6 +9,7 @@ Developed for Python 3.
 Authorization is performed using environment variables:
 
 **AWS_ACCESS_KEY_ID** -  Specifies an AWS access key
+
 **AWS_SECRET_ACCESS_KEY** - Specifies the secret key associated with the access key. This is essentially the "password" for the access key.
 
 
