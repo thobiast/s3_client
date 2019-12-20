@@ -32,9 +32,10 @@ def parse_parameters():
         %s -e https://s3.amazonaws.com upload my_bucket -d mydir
     ''' % (sys.argv[0], sys.argv[0], sys.argv[0], sys.argv[0])
     # Create the argparse object and define global options
-    parser = argparse.ArgumentParser(description='S3 Client sample script',
-                                     formatter_class=argparse.RawDescriptionHelpFormatter,
-                                     epilog=epilog)
+    parser = argparse.ArgumentParser(
+        description='S3 Client sample script',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=epilog)
     parser.add_argument('--debug', '-d',
                         action='store_true',
                         dest='debug',
@@ -96,15 +97,17 @@ def parse_parameters():
     download_parser.add_argument('--localdir', '-l',
                                  default='.',
                                  dest='localdir',
-                                 help='Local directory to save downloaded file.\
-                                      Default current directory')
-    download_group = download_parser.add_mutually_exclusive_group(required=True)
+                                 help='Local directory to save downloaded '
+                                      'file. Default current directory')
+    download_group = download_parser.add_mutually_exclusive_group(
+        required=True)
     download_group.add_argument('--file', '-f',
                                 dest='filename',
                                 help='Download a specific file')
     download_group.add_argument('--prefix', '-p',
                                 dest='prefix',
-                                help='Download recursively all files with a prefix.')
+                                help='Download recursively all files '
+                                     'with a prefix.')
     download_parser.set_defaults(func=cmd_download)
 
     # If there is no parameter, print help
@@ -149,14 +152,11 @@ def setup_logging(logfile=None, *,
 
     log_fmt = '%(asctime)s %(module)s %(funcName)s %(levelname)s %(message)s'
 
-    try:
-        logging.basicConfig(level=dict_level[log_level],
-                            format=log_fmt,
-                            datefmt=date_format,
-                            filemode=filemode,
-                            filename=logfile)
-    except:
-        raise
+    logging.basicConfig(level=dict_level[log_level],
+                        format=log_fmt,
+                        datefmt=date_format,
+                        filemode=filemode,
+                        filename=logfile)
 
     return logging.getLogger(__name__)
 
@@ -255,7 +255,9 @@ def create_dir(local_path):
         try:
             os.makedirs(local_path, exist_ok=True)
         except PermissionError:
-            msg("red", "PermissionError to create dir {}".format(local_path), 1)
+            msg("red",
+                "PermissionError to create dir {}".format(local_path),
+                1)
         except NotADirectoryError:
             msg("red", "Error: {} is not a directory".
                 format("/".join(local_path.split("/")[:-1])), 1)
@@ -387,7 +389,8 @@ class S3():
         self.s3_resource.Bucket(bucket_name).upload_file(Filename=file_name,
                                                          Key=key_name)
         elapsed_time = datetime.datetime.now() - start_time
-        msg("green", " Done. Elapsed time (hh:mm:ss.mm) {}".format(elapsed_time))
+        msg("green",
+            " Done. Elapsed time (hh:mm:ss.mm) {}".format(elapsed_time))
 
     def upload_dir(self, bucket_name, dir_name, keep_structure=True):
         """
@@ -433,7 +436,8 @@ class S3():
                 "Erro: File {} exist. Remove it from local drive to download.".
                 format(dest_name), 1)
 
-        # If necessary, create directories structure to save the downloaded file
+        # If necessary, create directories structure to save
+        # the downloaded file
         local_path = "/".join(dest_name.split("/")[:-1])
         create_dir(local_path)
 
@@ -446,7 +450,8 @@ class S3():
             msg("green", " Done.")
         except botocore.exceptions.ClientError as error:
             if error.response['Error']['Code'] == "404":
-                msg("red", " The object '{}' does not exist.".format(object_name))
+                msg("red",
+                    " The object '{}' does not exist.".format(object_name))
             else:
                 raise
 
@@ -507,10 +512,12 @@ def cmd_upload(s3, args):
 
     # If args.keepdir was specified at command line, then set
     # keep_structure to false, otherwise, set to True
-    keep_structure = False if args.nokeepdir else True
+    keep_structure = not args.nokeepdir
 
     if args.filename:
-        s3.upload_file(args.bucket, args.filename, keep_structure=keep_structure)
+        s3.upload_file(args.bucket,
+                       args.filename,
+                       keep_structure=keep_structure)
 
     if args.dir:
         s3.upload_dir(args.bucket, args.dir, keep_structure=keep_structure)
@@ -557,9 +564,13 @@ def main():
     log.debug('CMD line args: %s', vars(args))
 
     if os.environ.get('AWS_ACCESS_KEY_ID') is None:
-        msg("red", "Erro: You must set environment variable AWS_ACCESS_KEY_ID", 1)
+        msg("red",
+            "Erro: You must set environment variable AWS_ACCESS_KEY_ID",
+            1)
     if os.environ.get('AWS_SECRET_ACCESS_KEY') is None:
-        msg("red", "Erro: You must set environment variable AWS_SECRET_ACCESS_KEY", 1)
+        msg("red",
+            "Erro: You must set environment variable AWS_SECRET_ACCESS_KEY",
+            1)
 
     s3 = S3(os.environ.get('AWS_ACCESS_KEY_ID'),
             os.environ.get('AWS_SECRET_ACCESS_KEY'),
