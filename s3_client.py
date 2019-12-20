@@ -375,6 +375,7 @@ class S3():
             keep_structure (True/False): Keep original directory structure in
                                          key_name. (default: True)
         """
+        log.debug("Uploading file: %s", file_name)
         if not os.path.isfile(file_name):
             msg("red", "Error: File '{}' not found".format(file_name), 1)
 
@@ -403,7 +404,7 @@ class S3():
 
         for dirpath, dirnames, files in os.walk(dir_name):
             for filename in files:
-                object_name = os.path.relpath(os.path.join(dirpath, filename))
+                object_name = os.path.join(dirpath, filename)
                 self.upload_file(
                     bucket_name, object_name, keep_structure=keep_structure)
 
