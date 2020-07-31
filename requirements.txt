@@ -1,0 +1,5 @@
+pprint
+boto3
+botocore
+prettytable
+urllib3
