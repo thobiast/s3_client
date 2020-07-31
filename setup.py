@@ -43,6 +43,7 @@ setuptools.setup(
         "Intended Audience :: System Administrators",
         "Operating System :: OS Independent",
     ],
+    # flake8: noqa: E231
     entry_points={"console_scripts": ["s3_client=s3_client.s3_client:main",],},
 )
 

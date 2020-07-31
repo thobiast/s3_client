@@ -1,18 +1,24 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Sample python script to work with S3 buckets and objects
+Sample python script to work with S3 buckets and objects.
+
+This package performs basic s3 operation.
 """
 
-import sys
-import os
 import argparse
 import datetime
 import logging
+import os
 import pprint
-import prettytable
+import sys
+
 import boto3
+
 import botocore
+
+import prettytable
+
 import urllib3
 
 
@@ -20,9 +26,7 @@ import urllib3
 # Parses the command line arguments
 ##############################################################################
 def parse_parameters():
-    """
-    Command line parser
-    """
+    """Command line parser."""
     # epilog message: Custom text after the help
     epilog = """
     Example of use:
@@ -123,7 +127,7 @@ def parse_parameters():
 
 def setup_logging(logfile=None, *, filemode="a", date_format=None, log_level="DEBUG"):
     """
-    Configure logging
+    Configure logging.
 
     Arguments (opt):
         logfile     (str): log file to write the log messages
@@ -214,7 +218,8 @@ def msg(color, msg_text, exitcode=0, *, end="\n"):
 
 def print_table(header, rows, *, sortby="", alignl="", alignr="", hrules=""):
     """
-    Print table
+    Print table.
+
     Arguments:
         header     (list): List with table header
         rows       (list): Nested list with table rows
@@ -233,7 +238,7 @@ def print_table(header, rows, *, sortby="", alignl="", alignr="", hrules=""):
         output.hrules = getattr(prettytable, hrules)
 
     for row in rows:
-        row_entry = list()
+        row_entry = []
         for pos in row:
             row_entry.append(pos)
         output.add_row(row_entry)
@@ -274,11 +279,17 @@ def create_dir(local_path):
 
 
 class S3:
-    """
-    Class to handle S3 operations
-    """
+    """Class to handle S3 operations."""
 
     def __init__(self, key, secret, s3_endpoint):
+        """
+        Initialize s3 class.
+
+        Params:
+            key           (str): AWS_ACCESS_KEY_ID
+            secret        (str): AWS_SECRET_ACCESS_KEY
+            s3_endpoint   (str): S3 endpoint URL
+        """
         self.s3_resource = boto3.resource(
             "s3",
             endpoint_url=s3_endpoint,
@@ -286,11 +297,11 @@ class S3:
             aws_access_key_id=key,
             aws_secret_access_key=secret,
         )
-        self.buckets_exist = list()
+        self.buckets_exist = []
 
     def check_bucket_exist(self, bucket_name):
         """
-        Verify if a bucket exists
+        Verify if a bucket exists.
 
         Params:
             bucket_name           (str): Bucket name
@@ -315,7 +326,7 @@ class S3:
 
     def list_buckets(self, *, acl=False):
         """
-        List all buckets
+        List all buckets.
 
         Keyword arguments:
             acl     (True/False):  Display Bucket ACL details
@@ -339,7 +350,7 @@ class S3:
 
     def list_objects(self, bucket_name, table):
         """
-        List all objects stored in a bucket
+        List all objects stored in a bucket.
 
         Params:
             bucket_name           (str): Bucket name
@@ -347,9 +358,9 @@ class S3:
         """
         if table:
             header = ["Object", "Size", "Storage_Class", "Last_Modified"]
-            rows = list()
+            rows = []
             for obj in self.s3_resource.Bucket(bucket_name).objects.all():
-                row = list()
+                row = []
                 row.append(obj.key)
                 row.append(obj.size)
                 row.append(obj.storage_class)
@@ -374,7 +385,7 @@ class S3:
 
     def metadata_object(self, bucket_name, object_name):
         """
-        Return object metadata
+        Return object metadata.
 
         Params:
             bucket_name           (str): Bucket name
@@ -420,7 +431,7 @@ class S3:
         if not os.path.isdir(dir_name):
             msg("red", "Error: Directory '{}' not found".format(dir_name), 1)
 
-        for dirpath, dirnames, files in os.walk(dir_name):
+        for dirpath, _dirnames, files in os.walk(dir_name):
             for filename in files:
                 object_name = os.path.join(dirpath, filename)
                 self.upload_file(
@@ -429,7 +440,7 @@ class S3:
 
     def download_file(self, bucket_name, object_name, *, local_dir="."):
         """
-        Download an object from S3 to local directory
+        Download an object from S3 to local directory.
 
         Params:
             bucket_name            (str): Bucket name
@@ -473,8 +484,7 @@ class S3:
 
     def download_prefix(self, bucket_name, prefix, *, local_dir="."):
         """
-        Download (recursively) all objects with a prefix
-        from S3 to local directory
+        Download (recursively) all objects with a prefix from S3 to local directory.
 
         Params:
             bucket_name           (str): Bucket name
@@ -499,6 +509,7 @@ class S3:
 # Command to list object metadata
 ##############################################################################
 def cmd_metadata_obj(s3, args):
+    """Handle metadataobj option."""
     pprint.pprint(s3.metadata_object(args.bucket, args.object))
 
 
@@ -506,6 +517,7 @@ def cmd_metadata_obj(s3, args):
 # Command to list all buckets
 ##############################################################################
 def cmd_list_buckets(s3, args):
+    """Handle listbuckets option."""
     s3.list_buckets(acl=args.acl)
 
 
@@ -513,6 +525,7 @@ def cmd_list_buckets(s3, args):
 # Command to list all bucket's objects
 ##############################################################################
 def cmd_list_obj(s3, args):
+    """Handle listobj option."""
     # Check if bucket exist
     if not s3.check_bucket_exist(args.bucket):
         msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
@@ -524,6 +537,7 @@ def cmd_list_obj(s3, args):
 # Command to upload file or directory
 ##############################################################################
 def cmd_upload(s3, args):
+    """Handle upload option."""
     # Check if bucket exist
     if not s3.check_bucket_exist(args.bucket):
         msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
@@ -543,6 +557,7 @@ def cmd_upload(s3, args):
 # Command to download objects
 ##############################################################################
 def cmd_download(s3, args):
+    """Handle download option."""
     # Check if target local dir exist
     if not os.path.isdir(args.localdir):
         msg("red", "Error: Directory '{}' not found".format(args.localdir), 1)
@@ -562,6 +577,7 @@ def cmd_download(s3, args):
 # Main function
 ##############################################################################
 def main():
+    """Command line execution."""
     global log
 
     # Parser the command line
