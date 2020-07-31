@@ -1,8 +1,12 @@
-# s3_client
+# s3\_client
 
-**s3_client** - Sample python script to work with Amazon S3. It is proposed to be used for test, not production.
+**Sample python script to work with Amazon S3**
 
-Developed for Python 3.
+![build](https://github.com/thobiast/s3_client/workflows/build/badge.svg)
+[![codecov](https://codecov.io/gh/thobiast/s3_client/branch/master/graph/badge.svg)](https://codecov.io/gh/thobiast/s3_client)
+[![GitHub License](https://img.shields.io/github/license/thobiast/s3_client)](https://github.com/thobiast/s3_client/blob/master/LICENSE)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
 
 ### Authorization
 
