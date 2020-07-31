@@ -262,20 +262,19 @@ def create_dir(local_path):
     Params:
         local_path   (str): Directory to create
     """
-    # If local path does not exist, create it
-    if not os.path.exists(local_path):
-        try:
-            os.makedirs(local_path, exist_ok=True)
-        except PermissionError:
-            msg("red", "PermissionError to create dir {}".format(local_path), 1)
-        except NotADirectoryError:
+    # Check if local_path already exist
+    if os.path.exists(local_path):
+        if os.path.isfile(local_path):
             msg(
                 "red",
-                "Error: {} is not a directory".format(
-                    "/".join(local_path.split("/")[:-1])
-                ),
+                "Error: path {} exists and is not a directory".format(local_path),
                 1,
             )
+    else:
+        try:
+            os.makedirs(local_path)
+        except PermissionError:
+            msg("red", "Error: PermissionError to create dir {}".format(local_path), 1)
 
 
 class S3:
