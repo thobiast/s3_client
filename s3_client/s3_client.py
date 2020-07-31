@@ -1,18 +1,24 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Sample python script to work with S3 buckets and objects
+Sample python script to work with S3 buckets and objects.
+
+This package performs basic s3 operation.
 """
 
-import sys
-import os
 import argparse
 import datetime
 import logging
+import os
 import pprint
-import prettytable
+import sys
+
 import boto3
+
 import botocore
+
+import prettytable
+
 import urllib3
 
 
@@ -20,94 +26,95 @@ import urllib3
 # Parses the command line arguments
 ##############################################################################
 def parse_parameters():
-    """
-    Command line parser
-    """
+    """Command line parser."""
     # epilog message: Custom text after the help
-    epilog = '''
+    epilog = """
     Example of use:
         %s -e https://s3.amazonaws.com listbuckets
         %s -e https://s3.amazonaws.com listobj my_bucket -t
         %s -e https://s3.amazonaws.com upload my_bucket -f file1
         %s -e https://s3.amazonaws.com upload my_bucket -d mydir
-    ''' % (sys.argv[0], sys.argv[0], sys.argv[0], sys.argv[0])
+    """ % (
+        sys.argv[0],
+        sys.argv[0],
+        sys.argv[0],
+        sys.argv[0],
+    )
     # Create the argparse object and define global options
     parser = argparse.ArgumentParser(
-        description='S3 Client sample script',
+        description="S3 Client sample script",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=epilog)
-    parser.add_argument('--debug', '-d',
-                        action='store_true',
-                        dest='debug',
-                        help='debug flag')
-    parser.add_argument('--endpoint', '-e',
-                        required=True,
-                        dest='endpoint',
-                        help='S3 endpoint URL')
+        epilog=epilog,
+    )
+    parser.add_argument(
+        "--debug", "-d", action="store_true", dest="debug", help="debug flag"
+    )
+    parser.add_argument(
+        "--endpoint", "-e", required=True, dest="endpoint", help="S3 endpoint URL"
+    )
     # Add subcommands options
-    subparsers = parser.add_subparsers(title='Commands', dest='command')
+    subparsers = parser.add_subparsers(title="Commands", dest="command")
 
     # list buckets
-    listbuckets_parser = subparsers.add_parser('listbuckets',
-                                               help='List all buckets')
-    listbuckets_parser.add_argument('--acl',
-                                    default=False,
-                                    action='store_true',
-                                    help='Show ACL information')
+    listbuckets_parser = subparsers.add_parser("listbuckets", help="List all buckets")
+    listbuckets_parser.add_argument(
+        "--acl", default=False, action="store_true", help="Show ACL information"
+    )
     listbuckets_parser.set_defaults(func=cmd_list_buckets)
 
     # List objects
-    list_parser = subparsers.add_parser('listobj',
-                                        help='List Objects in a bucket')
-    list_parser.add_argument('--table', '-t',
-                             action='store_true',
-                             help='Show output as table')
-    list_parser.add_argument('bucket', help='Bucket Name')
+    list_parser = subparsers.add_parser("listobj", help="List Objects in a bucket")
+    list_parser.add_argument(
+        "--table", "-t", action="store_true", help="Show output as table"
+    )
+    list_parser.add_argument("bucket", help="Bucket Name")
     list_parser.set_defaults(func=cmd_list_obj)
 
     # Metadata objects
-    metadata_parser = subparsers.add_parser('metadataobj',
-                                            help='List Objects Metadata')
-    metadata_parser.add_argument('bucket', help='Bucket Name')
-    metadata_parser.add_argument('object', help='Object Key Name')
+    metadata_parser = subparsers.add_parser("metadataobj", help="List Objects Metadata")
+    metadata_parser.add_argument("bucket", help="Bucket Name")
+    metadata_parser.add_argument("object", help="Object Key Name")
     metadata_parser.set_defaults(func=cmd_metadata_obj)
 
     # Upload file
-    upload_parser = subparsers.add_parser('upload',
-                                          help='Upload files to bucket')
-    upload_parser.add_argument('bucket', help='Bucket Name')
-    upload_parser.add_argument('--nokeepdir',
-                               default=False,
-                               action='store_true',
-                               help='Do not keep local directory structure \
-                                    on uploaded objects names')
+    upload_parser = subparsers.add_parser("upload", help="Upload files to bucket")
+    upload_parser.add_argument("bucket", help="Bucket Name")
+    upload_parser.add_argument(
+        "--nokeepdir",
+        default=False,
+        action="store_true",
+        help="Do not keep local directory structure \
+                                    on uploaded objects names",
+    )
     upload_group = upload_parser.add_mutually_exclusive_group(required=True)
-    upload_group.add_argument('--file', '-f',
-                              dest='filename',
-                              help="File to upload")
-    upload_group.add_argument('--dir', '-d',
-                              dest='dir',
-                              help='Directory to upload all files recursively')
+    upload_group.add_argument("--file", "-f", dest="filename", help="File to upload")
+    upload_group.add_argument(
+        "--dir", "-d", dest="dir", help="Directory to upload all files recursively"
+    )
     upload_parser.set_defaults(func=cmd_upload)
 
     # Download file
-    download_parser = subparsers.add_parser('download',
-                                            help='Download files from bucket')
-    download_parser.add_argument('bucket', help='Bucket Name')
-    download_parser.add_argument('--localdir', '-l',
-                                 default='.',
-                                 dest='localdir',
-                                 help='Local directory to save downloaded '
-                                      'file. Default current directory')
-    download_group = download_parser.add_mutually_exclusive_group(
-        required=True)
-    download_group.add_argument('--file', '-f',
-                                dest='filename',
-                                help='Download a specific file')
-    download_group.add_argument('--prefix', '-p',
-                                dest='prefix',
-                                help='Download recursively all files '
-                                     'with a prefix.')
+    download_parser = subparsers.add_parser(
+        "download", help="Download files from bucket"
+    )
+    download_parser.add_argument("bucket", help="Bucket Name")
+    download_parser.add_argument(
+        "--localdir",
+        "-l",
+        default=".",
+        dest="localdir",
+        help="Local directory to save downloaded " "file. Default current directory",
+    )
+    download_group = download_parser.add_mutually_exclusive_group(required=True)
+    download_group.add_argument(
+        "--file", "-f", dest="filename", help="Download a specific file"
+    )
+    download_group.add_argument(
+        "--prefix",
+        "-p",
+        dest="prefix",
+        help="Download recursively all files " "with a prefix.",
+    )
     download_parser.set_defaults(func=cmd_download)
 
     # If there is no parameter, print help
@@ -118,10 +125,9 @@ def parse_parameters():
     return parser.parse_args()
 
 
-def setup_logging(logfile=None, *,
-                  filemode='a', date_format=None, log_level='DEBUG'):
+def setup_logging(logfile=None, *, filemode="a", date_format=None, log_level="DEBUG"):
     """
-    Configure logging
+    Configure logging.
 
     Arguments (opt):
         logfile     (str): log file to write the log messages
@@ -136,32 +142,36 @@ def setup_logging(logfile=None, *,
                            DEBUG, INFO, WARNING, ERROR or CRITICAL
                            default is DEBUG
     """
-    dict_level = {'DEBUG': logging.DEBUG,
-                  'INFO': logging.INFO,
-                  'WARNING': logging.WARNING,
-                  'ERROR': logging.ERROR,
-                  'CRITICAL': logging.CRITICAL}
+    dict_level = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL,
+    }
 
     if log_level not in dict_level:
         raise ValueError("Invalid log_level")
-    if filemode not in ['a', 'w']:
+    if filemode not in ["a", "w"]:
         raise ValueError("Invalid filemode")
 
     if not date_format:
-        date_format = '%m/%d/%Y %H:%M:%S'
+        date_format = "%m/%d/%Y %H:%M:%S"
 
-    log_fmt = '%(asctime)s %(module)s %(funcName)s %(levelname)s %(message)s'
+    log_fmt = "%(asctime)s %(module)s %(funcName)s %(levelname)s %(message)s"
 
-    logging.basicConfig(level=dict_level[log_level],
-                        format=log_fmt,
-                        datefmt=date_format,
-                        filemode=filemode,
-                        filename=logfile)
+    logging.basicConfig(
+        level=dict_level[log_level],
+        format=log_fmt,
+        datefmt=date_format,
+        filemode=filemode,
+        filename=logfile,
+    )
 
     return logging.getLogger(__name__)
 
 
-def msg(color, msg_text, exitcode=0, *, end='\n'):
+def msg(color, msg_text, exitcode=0, *, end="\n"):
     """
     Print colored text.
 
@@ -182,19 +192,20 @@ def msg(color, msg_text, exitcode=0, *, end='\n'):
         msg("blue", "nice text in blue")
         msg("red", "Error in my script.. terminating", 1)
     """
-    color_dic = {'blue': '\033[0;34m',
-                 'red': '\033[1;31m',
-                 'green': '\033[0;32m',
-                 'yellow': '\033[0;33m',
-                 'cyan': '\033[0;36m',
-                 'resetcolor': '\033[0m'}
+    color_dic = {
+        "blue": "\033[0;34m",
+        "red": "\033[1;31m",
+        "green": "\033[0;32m",
+        "yellow": "\033[0;33m",
+        "cyan": "\033[0;36m",
+        "resetcolor": "\033[0m",
+    }
 
-    if not color or color == 'nocolor':
+    if not color or color == "nocolor":
         print(msg_text, end=end)
     else:
         try:
-            print(color_dic[color] + msg_text + color_dic['resetcolor'],
-                  end=end)
+            print(color_dic[color] + msg_text + color_dic["resetcolor"], end=end)
         except KeyError as exc:
             raise ValueError("Invalid color") from exc
 
@@ -205,9 +216,10 @@ def msg(color, msg_text, exitcode=0, *, end='\n'):
         sys.exit(exitcode)
 
 
-def print_table(header, rows, *, sortby='', alignl='', alignr='', hrules=''):
+def print_table(header, rows, *, sortby="", alignl="", alignr="", hrules=""):
     """
-    Print table
+    Print table.
+
     Arguments:
         header     (list): List with table header
         rows       (list): Nested list with table rows
@@ -226,7 +238,7 @@ def print_table(header, rows, *, sortby='', alignl='', alignr='', hrules=''):
         output.hrules = getattr(prettytable, hrules)
 
     for row in rows:
-        row_entry = list()
+        row_entry = []
         for pos in row:
             row_entry.append(pos)
         output.add_row(row_entry)
@@ -236,9 +248,9 @@ def print_table(header, rows, *, sortby='', alignl='', alignr='', hrules=''):
         # sort by first column by default
         output.sortby = sortby if sortby in header else header[0]
     for left in alignl:
-        output.align[left] = 'l'
+        output.align[left] = "l"
     for right in alignr:
-        output.align[right] = 'r'
+        output.align[right] = "r"
 
     print(output)
 
@@ -250,34 +262,45 @@ def create_dir(local_path):
     Params:
         local_path   (str): Directory to create
     """
-    # If local path does not exist, create it
-    if not os.path.exists(local_path):
+    # Check if local_path already exist
+    if os.path.exists(local_path):
+        if os.path.isfile(local_path):
+            msg(
+                "red",
+                "Error: path {} exists and is not a directory".format(local_path),
+                1,
+            )
+    else:
         try:
-            os.makedirs(local_path, exist_ok=True)
+            os.makedirs(local_path)
         except PermissionError:
-            msg("red",
-                "PermissionError to create dir {}".format(local_path),
-                1)
-        except NotADirectoryError:
-            msg("red", "Error: {} is not a directory".
-                format("/".join(local_path.split("/")[:-1])), 1)
+            msg("red", "Error: PermissionError to create dir {}".format(local_path), 1)
 
 
-class S3():
-    """
-    Class to handle S3 operations
-    """
+class S3:
+    """Class to handle S3 operations."""
+
     def __init__(self, key, secret, s3_endpoint):
-        self.s3_resource = boto3.resource('s3',
-                                          endpoint_url=s3_endpoint,
-                                          verify=False,
-                                          aws_access_key_id=key,
-                                          aws_secret_access_key=secret)
-        self.buckets_exist = list()
+        """
+        Initialize s3 class.
+
+        Params:
+            key           (str): AWS_ACCESS_KEY_ID
+            secret        (str): AWS_SECRET_ACCESS_KEY
+            s3_endpoint   (str): S3 endpoint URL
+        """
+        self.s3_resource = boto3.resource(
+            "s3",
+            endpoint_url=s3_endpoint,
+            verify=False,
+            aws_access_key_id=key,
+            aws_secret_access_key=secret,
+        )
+        self.buckets_exist = []
 
     def check_bucket_exist(self, bucket_name):
         """
-        Verify if a bucket exists
+        Verify if a bucket exists.
 
         Params:
             bucket_name           (str): Bucket name
@@ -288,8 +311,7 @@ class S3():
         """
         # If bucket was already checked, return it exists
         if bucket_name in self.buckets_exist:
-            log.debug("bucket %s was already checked, do not check again",
-                      bucket_name)
+            log.debug("bucket %s was already checked, do not check again", bucket_name)
             return 1
 
         try:
@@ -298,67 +320,71 @@ class S3():
             self.buckets_exist.append(bucket_name)
             return 1
         except botocore.exceptions.ClientError as error:
-            if error.response['Error']['Code'] == '404':
+            if error.response["Error"]["Code"] == "404":
                 return 0
 
     def list_buckets(self, *, acl=False):
         """
-        List all buckets
+        List all buckets.
 
         Keyword arguments:
             acl     (True/False):  Display Bucket ACL details
                                    default: False
         """
         for bucket in self.s3_resource.buckets.all():
-            msg("cyan", "Bucket_Name:", end='')
-            msg("nocolor", " {} ".format(bucket.name), end='')
-            msg("cyan", "Creation_Date:", end='')
+            msg("cyan", "Bucket_Name:", end="")
+            msg("nocolor", " {} ".format(bucket.name), end="")
+            msg("cyan", "Creation_Date:", end="")
             msg("nocolor", " {}".format(bucket.creation_date))
             if acl:
                 for grant in bucket.Acl().grants:
-                    msg("nocolor",
+                    msg(
+                        "nocolor",
                         " ACL - ID: {} DisplayName: {} Permission {}".format(
-                            grant['Grantee']['ID'],
-                            grant['Grantee']['DisplayName'],
-                            grant['Permission']))
+                            grant["Grantee"]["ID"],
+                            grant["Grantee"]["DisplayName"],
+                            grant["Permission"],
+                        ),
+                    )
 
     def list_objects(self, bucket_name, table):
         """
-        List all objects stored in a bucket
+        List all objects stored in a bucket.
 
         Params:
             bucket_name           (str): Bucket name
             table          (True/False): Show objects output as table
         """
         if table:
-            header = ['Object', 'Size', 'Storage_Class', 'Last_Modified']
-            rows = list()
+            header = ["Object", "Size", "Storage_Class", "Last_Modified"]
+            rows = []
             for obj in self.s3_resource.Bucket(bucket_name).objects.all():
-                row = list()
+                row = []
                 row.append(obj.key)
                 row.append(obj.size)
                 row.append(obj.storage_class)
                 row.append(obj.last_modified)
                 rows.append(row)
-            align_right = ['Size']
-            align_left = ['Object']
-            sortby = 'Object'
-            print_table(header, rows, sortby=sortby,
-                        alignl=align_left, alignr=align_right)
+            align_right = ["Size"]
+            align_left = ["Object"]
+            sortby = "Object"
+            print_table(
+                header, rows, sortby=sortby, alignl=align_left, alignr=align_right
+            )
         else:
             for obj in self.s3_resource.Bucket(bucket_name).objects.all():
-                msg("cyan", "Obj:", end='')
-                msg("nocolor", " {} ".format(obj.key), end='')
-                msg("cyan", "Size:", end='')
-                msg("nocolor", " {} ".format(obj.size), end='')
-                msg("cyan", "Storage_Class:", end='')
-                msg("nocolor", " {} ".format(obj.storage_class), end='')
-                msg("cyan", "Last_Modified:", end='')
+                msg("cyan", "Obj:", end="")
+                msg("nocolor", " {} ".format(obj.key), end="")
+                msg("cyan", "Size:", end="")
+                msg("nocolor", " {} ".format(obj.size), end="")
+                msg("cyan", "Storage_Class:", end="")
+                msg("nocolor", " {} ".format(obj.storage_class), end="")
+                msg("cyan", "Last_Modified:", end="")
                 msg("nocolor", " {}".format(obj.last_modified))
 
     def metadata_object(self, bucket_name, object_name):
         """
-        Return object metadata
+        Return object metadata.
 
         Params:
             bucket_name           (str): Bucket name
@@ -383,14 +409,13 @@ class S3():
 
         key_name = file_name if keep_structure else file_name.split("/")[-1]
 
-        msg("cyan", "Uploading file {} with key {}".format(file_name,
-                                                           key_name), end='')
+        msg("cyan", "Uploading file {} with key {}".format(file_name, key_name), end="")
         start_time = datetime.datetime.now()
-        self.s3_resource.Bucket(bucket_name).upload_file(Filename=file_name,
-                                                         Key=key_name)
+        self.s3_resource.Bucket(bucket_name).upload_file(
+            Filename=file_name, Key=key_name
+        )
         elapsed_time = datetime.datetime.now() - start_time
-        msg("green",
-            " Done. Elapsed time (hh:mm:ss.mm) {}".format(elapsed_time))
+        msg("green", " Done. Elapsed time (hh:mm:ss.mm) {}".format(elapsed_time))
 
     def upload_dir(self, bucket_name, dir_name, keep_structure=True):
         """
@@ -405,15 +430,16 @@ class S3():
         if not os.path.isdir(dir_name):
             msg("red", "Error: Directory '{}' not found".format(dir_name), 1)
 
-        for dirpath, dirnames, files in os.walk(dir_name):
+        for dirpath, _dirnames, files in os.walk(dir_name):
             for filename in files:
                 object_name = os.path.join(dirpath, filename)
                 self.upload_file(
-                    bucket_name, object_name, keep_structure=keep_structure)
+                    bucket_name, object_name, keep_structure=keep_structure
+                )
 
-    def download_file(self, bucket_name, object_name, *, local_dir='.'):
+    def download_file(self, bucket_name, object_name, *, local_dir="."):
         """
-        Download an object from S3 to local directory
+        Download an object from S3 to local directory.
 
         Params:
             bucket_name            (str): Bucket name
@@ -432,33 +458,32 @@ class S3():
 
         # Check if file exist on local drive
         if os.path.isfile(dest_name):
-            msg("red",
-                "Erro: File {} exist. Remove it from local drive to download.".
-                format(dest_name), 1)
+            msg(
+                "red",
+                "Erro: File {} exist. Remove it from local drive to download.".format(
+                    dest_name
+                ),
+                1,
+            )
 
         # If necessary, create directories structure to save
         # the downloaded file
         local_path = "/".join(dest_name.split("/")[:-1])
         create_dir(local_path)
 
-        msg("cyan",
-            "Downloading {} to dir '{}'".format(object_name, local_dir),
-            end='')
+        msg("cyan", "Downloading {} to dir '{}'".format(object_name, local_dir), end="")
         try:
-            self.s3_resource.Bucket(bucket_name).download_file(object_name,
-                                                               dest_name)
+            self.s3_resource.Bucket(bucket_name).download_file(object_name, dest_name)
             msg("green", " Done.")
         except botocore.exceptions.ClientError as error:
-            if error.response['Error']['Code'] == "404":
-                msg("red",
-                    " The object '{}' does not exist.".format(object_name))
+            if error.response["Error"]["Code"] == "404":
+                msg("red", " The object '{}' does not exist.".format(object_name))
             else:
                 raise
 
-    def download_prefix(self, bucket_name, prefix, *, local_dir='.'):
+    def download_prefix(self, bucket_name, prefix, *, local_dir="."):
         """
-        Download (recursively) all objects with a prefix
-        from S3 to local directory
+        Download (recursively) all objects with a prefix from S3 to local directory.
 
         Params:
             bucket_name           (str): Bucket name
@@ -468,12 +493,14 @@ class S3():
             local_dir             (str): Local directory to save downloaded
                                          files. Default: Current directory
         """
-        msg("blue",
-            "Downloading files prefix {} from bucket {} to local dir {}".
-            format(prefix, bucket_name, local_dir))
+        msg(
+            "blue",
+            "Downloading files prefix {} from bucket {} to local dir {}".format(
+                prefix, bucket_name, local_dir
+            ),
+        )
 
-        for obj in self.s3_resource.Bucket(bucket_name).objects.filter(
-                Prefix=prefix):
+        for obj in self.s3_resource.Bucket(bucket_name).objects.filter(Prefix=prefix):
             self.download_file(bucket_name, obj.key, local_dir=local_dir)
 
 
@@ -481,6 +508,7 @@ class S3():
 # Command to list object metadata
 ##############################################################################
 def cmd_metadata_obj(s3, args):
+    """Handle metadataobj option."""
     pprint.pprint(s3.metadata_object(args.bucket, args.object))
 
 
@@ -488,6 +516,7 @@ def cmd_metadata_obj(s3, args):
 # Command to list all buckets
 ##############################################################################
 def cmd_list_buckets(s3, args):
+    """Handle listbuckets option."""
     s3.list_buckets(acl=args.acl)
 
 
@@ -495,6 +524,7 @@ def cmd_list_buckets(s3, args):
 # Command to list all bucket's objects
 ##############################################################################
 def cmd_list_obj(s3, args):
+    """Handle listobj option."""
     # Check if bucket exist
     if not s3.check_bucket_exist(args.bucket):
         msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
@@ -506,6 +536,7 @@ def cmd_list_obj(s3, args):
 # Command to upload file or directory
 ##############################################################################
 def cmd_upload(s3, args):
+    """Handle upload option."""
     # Check if bucket exist
     if not s3.check_bucket_exist(args.bucket):
         msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
@@ -515,9 +546,7 @@ def cmd_upload(s3, args):
     keep_structure = not args.nokeepdir
 
     if args.filename:
-        s3.upload_file(args.bucket,
-                       args.filename,
-                       keep_structure=keep_structure)
+        s3.upload_file(args.bucket, args.filename, keep_structure=keep_structure)
 
     if args.dir:
         s3.upload_dir(args.bucket, args.dir, keep_structure=keep_structure)
@@ -527,6 +556,7 @@ def cmd_upload(s3, args):
 # Command to download objects
 ##############################################################################
 def cmd_download(s3, args):
+    """Handle download option."""
     # Check if target local dir exist
     if not os.path.isdir(args.localdir):
         msg("red", "Error: Directory '{}' not found".format(args.localdir), 1)
@@ -546,6 +576,7 @@ def cmd_download(s3, args):
 # Main function
 ##############################################################################
 def main():
+    """Command line execution."""
     global log
 
     # Parser the command line
@@ -555,26 +586,24 @@ def main():
     # The following line configure it to only write messages if is
     # at least error
     logging.getLogger("boto3").setLevel(logging.ERROR)
-    logging.getLogger('s3transfer').setLevel(logging.ERROR)
+    logging.getLogger("s3transfer").setLevel(logging.ERROR)
     logging.getLogger("botocore").setLevel(logging.ERROR)
     logging.getLogger("urllib3").setLevel(logging.ERROR)
     urllib3.disable_warnings()
     # Configure log if --debug
     log = setup_logging() if args.debug else logging
-    log.debug('CMD line args: %s', vars(args))
+    log.debug("CMD line args: %s", vars(args))
 
-    if os.environ.get('AWS_ACCESS_KEY_ID') is None:
-        msg("red",
-            "Erro: You must set environment variable AWS_ACCESS_KEY_ID",
-            1)
-    if os.environ.get('AWS_SECRET_ACCESS_KEY') is None:
-        msg("red",
-            "Erro: You must set environment variable AWS_SECRET_ACCESS_KEY",
-            1)
+    if os.environ.get("AWS_ACCESS_KEY_ID") is None:
+        msg("red", "Erro: You must set environment variable AWS_ACCESS_KEY_ID", 1)
+    if os.environ.get("AWS_SECRET_ACCESS_KEY") is None:
+        msg("red", "Erro: You must set environment variable AWS_SECRET_ACCESS_KEY", 1)
 
-    s3 = S3(os.environ.get('AWS_ACCESS_KEY_ID'),
-            os.environ.get('AWS_SECRET_ACCESS_KEY'),
-            args.endpoint)
+    s3 = S3(
+        os.environ.get("AWS_ACCESS_KEY_ID"),
+        os.environ.get("AWS_SECRET_ACCESS_KEY"),
+        args.endpoint,
+    )
 
     # Execute the funcion (command)
     if args.command is not None:
@@ -584,7 +613,7 @@ def main():
 ##############################################################################
 # Run from command line
 ##############################################################################
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
 
 # vim: ts=4
