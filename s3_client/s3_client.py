@@ -449,6 +449,8 @@ class S3:
             local_dir              (str): Local directory to save downloaded
                                           files. Default: Current directory
         """
+        log.debug("local_dir: %s", local_dir)
+        log.debug("object_name: %s", object_name)
         if not local_dir.endswith("/") and not object_name.startswith("/"):
             dest_name = local_dir + "/" + object_name
         elif local_dir.endswith("/") and object_name.startswith("/"):
@@ -456,6 +458,7 @@ class S3:
         else:
             dest_name = local_dir + object_name
 
+        log.debug("dest_name: %s", dest_name)
         # Check if file exist on local drive
         if os.path.isfile(dest_name):
             msg(
@@ -557,9 +560,6 @@ def cmd_upload(s3, args):
 ##############################################################################
 def cmd_download(s3, args):
     """Handle download option."""
-    # Check if target local dir exist
-    if not os.path.isdir(args.localdir):
-        msg("red", "Error: Directory '{}' not found".format(args.localdir), 1)
     # Check if bucket exist
     if not s3.check_bucket_exist(args.bucket):
         msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
