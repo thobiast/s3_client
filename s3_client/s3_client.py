@@ -50,7 +50,7 @@ def parse_parameters():
         "--debug", "-d", action="store_true", dest="debug", help="debug flag"
     )
     parser.add_argument(
-        "--endpoint", "-e", required=True, dest="endpoint", help="S3 endpoint URL"
+        "--endpoint", "-e", default=None, dest="endpoint", help="S3 endpoint URL"
     )
     # Add subcommands options
     subparsers = parser.add_subparsers(title="Commands", dest="command")
@@ -118,7 +118,7 @@ def parse_parameters():
     download_parser.set_defaults(func=cmd_download)
 
     # If there is no parameter, print help
-    if len(sys.argv) < 3:
+    if len(sys.argv) < 2:
         parser.print_help()
         sys.exit(0)
 
@@ -275,6 +275,24 @@ def create_dir(local_path):
             os.makedirs(local_path)
         except PermissionError:
             msg("red", "Error: PermissionError to create dir {}".format(local_path), 1)
+
+
+class Config:
+    """Class to handle configurations."""
+
+    def __init__(self):
+        """Initialize configurations."""
+        self.aws_access_key_id = self.get_env("AWS_ACCESS_KEY_ID")
+        self.aws_secret_access_key = self.get_env("AWS_SECRET_ACCESS_KEY")
+
+    @staticmethod
+    def get_env(var):
+        """Read environment variable."""
+        if not os.environ.get(var):
+            raise ValueError(
+                "Error: You must export environment variable {}".format(var)
+            )
+        return os.environ.get(var)
 
 
 class S3:
@@ -594,16 +612,12 @@ def main():
     log = setup_logging() if args.debug else logging
     log.debug("CMD line args: %s", vars(args))
 
-    if os.environ.get("AWS_ACCESS_KEY_ID") is None:
-        msg("red", "Erro: You must set environment variable AWS_ACCESS_KEY_ID", 1)
-    if os.environ.get("AWS_SECRET_ACCESS_KEY") is None:
-        msg("red", "Erro: You must set environment variable AWS_SECRET_ACCESS_KEY", 1)
+    try:
+        config = Config()
+    except ValueError as error:
+        msg("red", str(error), 1)
 
-    s3 = S3(
-        os.environ.get("AWS_ACCESS_KEY_ID"),
-        os.environ.get("AWS_SECRET_ACCESS_KEY"),
-        args.endpoint,
-    )
+    s3 = S3(config.aws_access_key_id, config.aws_secret_access_key, args.endpoint,)
 
     # Execute the funcion (command)
     if args.command is not None:
