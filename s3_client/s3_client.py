@@ -305,29 +305,14 @@ class S3:
             if error.response["Error"]["Code"] == "404":
                 return False
 
-    def list_buckets(self, *, acl=False):
+    def list_buckets(self):
         """
         List all buckets.
 
-        Keyword arguments:
-            acl     (True/False):  Display Bucket ACL details
-                                   default: False
+        Returns:
+            A list of Bucket resources
         """
-        for bucket in self.s3_resource.buckets.all():
-            msg("cyan", "Bucket_Name:", end="")
-            msg("nocolor", " {} ".format(bucket.name), end="")
-            msg("cyan", "Creation_Date:", end="")
-            msg("nocolor", " {}".format(bucket.creation_date))
-            if acl:
-                for grant in bucket.Acl().grants:
-                    msg(
-                        "nocolor",
-                        " ACL - ID: {} DisplayName: {} Permission {}".format(
-                            grant["Grantee"]["ID"],
-                            grant["Grantee"]["DisplayName"],
-                            grant["Permission"],
-                        ),
-                    )
+        return self.s3_resource.buckets.all()
 
     def list_objects(self, bucket_name, prefix=None):
         """
@@ -497,7 +482,15 @@ def cmd_metadata_obj(s3, args):
 ##############################################################################
 def cmd_list_buckets(s3, args):
     """Handle listbuckets option."""
-    s3.list_buckets(acl=args.acl)
+    attrs = ["name", "creation_date"]
+    for bucket in s3.list_buckets():
+        for attr in attrs:
+            msg("cyan", attr, end=": ")
+            msg("nocolor", getattr(bucket, attr), end=" ")
+        msg("nocolor", "")
+        if args.acl:
+            msg("cyan", "  acl: ")
+            msg("nocolor", "   {}".format(pprint.pformat(bucket.Acl().grants)))
 
 
 ##############################################################################
