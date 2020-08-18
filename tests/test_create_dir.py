@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Test msg function."""
+"""Test create_dir function."""
 
 from unittest.mock import patch
 import pytest
