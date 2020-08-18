@@ -17,7 +17,7 @@ import boto3
 
 import botocore
 
-import prettytable
+import tabulate
 
 import urllib3
 
@@ -66,6 +66,9 @@ def parse_parameters():
     list_parser = subparsers.add_parser("listobj", help="List Objects in a bucket")
     list_parser.add_argument(
         "--table", "-t", action="store_true", help="Show output as table"
+    )
+    list_parser.add_argument(
+        "--prefix", "-p", required=False, help="Only objects with specificrefix"
     )
     list_parser.add_argument("bucket", help="Bucket Name")
     list_parser.set_defaults(func=cmd_list_obj)
@@ -216,45 +219,6 @@ def msg(color, msg_text, exitcode=0, *, end="\n"):
         sys.exit(exitcode)
 
 
-def print_table(header, rows, *, sortby="", alignl="", alignr="", hrules=""):
-    """
-    Print table.
-
-    Arguments:
-        header     (list): List with table header
-        rows       (list): Nested list with table rows
-                           [ [row1], [row2], [row3], ... ]
-
-    Keyword arguments (optional):
-        sortby      (str): header name to sort the output
-        alignl     (list): headers name to align to left
-        alignr     (list): headers name to align to right
-        hrules      (str): Controls printing of horizontal rules after rows.
-                           Allowed values: FRAME, HEADER, ALL, NONE
-    """
-    output = prettytable.PrettyTable(header)
-    output.format = True
-    if hrules:
-        output.hrules = getattr(prettytable, hrules)
-
-    for row in rows:
-        row_entry = []
-        for pos in row:
-            row_entry.append(pos)
-        output.add_row(row_entry)
-
-    if sortby:
-        # if sortby is invalid, ie, does not exist on header,
-        # sort by first column by default
-        output.sortby = sortby if sortby in header else header[0]
-    for left in alignl:
-        output.align[left] = "l"
-    for right in alignr:
-        output.align[right] = "r"
-
-    print(output)
-
-
 def create_dir(local_path):
     """
     Create a local directory. It supports nested directory.
@@ -330,16 +294,16 @@ class S3:
         # If bucket was already checked, return it exists
         if bucket_name in self.buckets_exist:
             log.debug("bucket %s was already checked, do not check again", bucket_name)
-            return 1
+            return True
 
         try:
             log.debug("Checking if bucket exist: %s", bucket_name)
             self.s3_resource.meta.client.head_bucket(Bucket=bucket_name)
             self.buckets_exist.append(bucket_name)
-            return 1
+            return True
         except botocore.exceptions.ClientError as error:
             if error.response["Error"]["Code"] == "404":
-                return 0
+                return False
 
     def list_buckets(self, *, acl=False):
         """
@@ -365,40 +329,24 @@ class S3:
                         ),
                     )
 
-    def list_objects(self, bucket_name, table):
+    def list_objects(self, bucket_name, prefix=None):
         """
-        List all objects stored in a bucket.
+        List objects stored in a bucket.
 
         Params:
-            bucket_name           (str): Bucket name
-            table          (True/False): Show objects output as table
+            bucket_name      (str): Bucket name
+            prefix           (str): Filter only objects with specific prefix
+                                    default None
+
+        Returns:
+            An iterable of ObjectSummary resources
         """
-        if table:
-            header = ["Object", "Size", "Storage_Class", "Last_Modified"]
-            rows = []
-            for obj in self.s3_resource.Bucket(bucket_name).objects.all():
-                row = []
-                row.append(obj.key)
-                row.append(obj.size)
-                row.append(obj.storage_class)
-                row.append(obj.last_modified)
-                rows.append(row)
-            align_right = ["Size"]
-            align_left = ["Object"]
-            sortby = "Object"
-            print_table(
-                header, rows, sortby=sortby, alignl=align_left, alignr=align_right
+        if prefix:
+            return self.s3_resource.Bucket(bucket_name).objects.filter(
+                Delimiter="/", Prefix=prefix,
             )
         else:
-            for obj in self.s3_resource.Bucket(bucket_name).objects.all():
-                msg("cyan", "Obj:", end="")
-                msg("nocolor", " {} ".format(obj.key), end="")
-                msg("cyan", "Size:", end="")
-                msg("nocolor", " {} ".format(obj.size), end="")
-                msg("cyan", "Storage_Class:", end="")
-                msg("nocolor", " {} ".format(obj.storage_class), end="")
-                msg("cyan", "Last_Modified:", end="")
-                msg("nocolor", " {}".format(obj.last_modified))
+            return self.s3_resource.Bucket(bucket_name).objects.all()
 
     def metadata_object(self, bucket_name, object_name):
         """
@@ -561,7 +509,25 @@ def cmd_list_obj(s3, args):
     if not s3.check_bucket_exist(args.bucket):
         msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
 
-    s3.list_objects(args.bucket, args.table)
+    objects = s3.list_objects(args.bucket, args.prefix)
+
+    # Resource's attributes:
+    attrs = ["key", "size", "storage_class", "e_tag", "last_modified"]
+    if args.table:
+        # Tabulate needs to keep the entire table in-memory
+        table = []
+        # Use the first row of data as a table header
+        table.append(attrs)
+        for obj in objects:
+            line = [getattr(obj, attr) for attr in attrs]
+            table.append(line)
+        print(tabulate.tabulate(table, headers="firstrow", tablefmt="github"))
+    else:
+        for obj in objects:
+            for attr in attrs:
+                msg("cyan", attr, end=": ")
+                msg("nocolor", getattr(obj, attr), end=" ")
+            msg("nocolor", "")
 
 
 ##############################################################################
