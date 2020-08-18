@@ -406,10 +406,11 @@ class S3:
 
         Params:
             bucket_name           (str): Bucket name
-            object_nama           (str): Object key
+            object_name           (str): Object key name
         """
-        obj = self.s3_resource.Object(bucket_name, object_name)
-        return obj.meta.client.head_object(Bucket=bucket_name, Key=object_name)
+        return self.s3_resource.meta.client.head_object(
+            Bucket=bucket_name, Key=object_name
+        )
 
     def upload_file(self, bucket_name, file_name, keep_structure=True):
         """
@@ -530,7 +531,17 @@ class S3:
 ##############################################################################
 def cmd_metadata_obj(s3, args):
     """Handle metadataobj option."""
-    pprint.pprint(s3.metadata_object(args.bucket, args.object))
+    # Check if bucket exist
+    if not s3.check_bucket_exist(args.bucket):
+        msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
+
+    try:
+        pprint.pprint(s3.metadata_object(args.bucket, args.object))
+    except botocore.exceptions.ClientError as error:
+        if error.response["Error"]["Code"] == "404":
+            msg("red", "Error: key '{}' not found".format(args.object), 1)
+        else:
+            raise
 
 
 ##############################################################################
