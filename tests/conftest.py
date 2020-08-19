@@ -10,6 +10,8 @@ BUCKET_NAME = "my_bucket"
 BUCKET_NAME_NOT_EXIST = "my_bucket_does_not_exist"
 KEY_NAMES = ["A", "B", "t01", "t02", "test01", "test02", "test03"]
 
+TMP_FILENAME = "my_file"
+
 
 @pytest.fixture(scope="function")
 def s3():
@@ -32,3 +34,11 @@ def s3_objects():
         for key_name in KEY_NAMES:
             conn.meta.client.put_object(Bucket=BUCKET_NAME, Key=key_name, Body="body")
         yield conn
+
+
+@pytest.fixture(scope="function")
+def tmp_filename(tmpdir):
+    """Creates a temporary file and return full pathname."""
+    p = tmpdir.join(TMP_FILENAME)
+    p.write(TMP_FILENAME)
+    return str(p)

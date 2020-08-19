@@ -3,15 +3,16 @@
 """
 Sample python script to work with S3 buckets and objects.
 
-This package performs basic s3 operation.
+This package performs basic s3 operations.
 """
 
 import argparse
-import datetime
+import functools
 import logging
 import os
 import pprint
 import sys
+import time
 
 import boto3
 
@@ -219,6 +220,31 @@ def msg(color, msg_text, exitcode=0, *, end="\n"):
         sys.exit(exitcode)
 
 
+def time_elapsed(func):
+    """
+    Calculate elapsed time in seconds.
+
+    Decorator prints function elapsed time after its execution
+    """
+
+    @functools.wraps(func)
+    def wrapped_f(*args, **kwargs):
+        start_time = time.perf_counter()
+        result = func(*args, **kwargs)
+        end_time = time.perf_counter()
+        elapsed_time = end_time - start_time
+        # keep track of total elapsed time for all execution of the function
+        wrapped_f.elapsed += elapsed_time
+
+        output = "  - Elapsed time {:.4f} seconds ".format(elapsed_time)
+        msg("nocolor", output)
+
+        return result
+
+    wrapped_f.elapsed = 0
+    return wrapped_f
+
+
 def create_dir(local_path):
     """
     Create a local directory. It supports nested directory.
@@ -288,8 +314,8 @@ class S3:
             bucket_name           (str): Bucket name
 
         Return:
-            1     : bucket exists
-            0     : bucket does not exist
+            True  : bucket exists
+            False : bucket does not exist
         """
         # If bucket was already checked, return it exists
         if bucket_name in self.buckets_exist:
@@ -304,6 +330,8 @@ class S3:
         except botocore.exceptions.ClientError as error:
             if error.response["Error"]["Code"] == "404":
                 return False
+            else:
+                raise
 
     def list_buckets(self):
         """
@@ -345,49 +373,26 @@ class S3:
             Bucket=bucket_name, Key=object_name
         )
 
-    def upload_file(self, bucket_name, file_name, keep_structure=True):
+    @time_elapsed
+    def upload_file(self, bucket_name, file_name, key_name=None):
         """
         Upload a file from local source to S3.
 
         Params:
-            bucket_name           (str): Bucket name
-            file_name             (str): File name
-            keep_structure (True/False): Keep original directory structure in
-                                         key_name. (default: True)
+            bucket_name        (str): The name of the bucket to upload to
+            file_name          (str): The path to the file to upload
+            key_name           (str): The name of the key to upload to
+                                      If key_name is None, the file_name
+                                      is used as object name
         """
-        log.debug("Uploading file: %s", file_name)
-        if not os.path.isfile(file_name):
-            msg("red", "Error: File '{}' not found".format(file_name), 1)
+        if key_name is None:
+            key_name = file_name
 
-        key_name = file_name if keep_structure else file_name.split("/")[-1]
+        log.debug("Uploading file: %s with key: %s", file_name, key_name)
 
-        msg("cyan", "Uploading file {} with key {}".format(file_name, key_name), end="")
-        start_time = datetime.datetime.now()
         self.s3_resource.Bucket(bucket_name).upload_file(
-            Filename=file_name, Key=key_name
+            Filename=file_name, Key=key_name,
         )
-        elapsed_time = datetime.datetime.now() - start_time
-        msg("green", " Done. Elapsed time (hh:mm:ss.mm) {}".format(elapsed_time))
-
-    def upload_dir(self, bucket_name, dir_name, keep_structure=True):
-        """
-        Upload all files recursively from local directory to S3.
-
-        Params:
-            bucket_name           (str): Bucket name
-            dir_name              (str): Directory name
-            keep_structure (True/False): Keep original directory structure in
-                                         key_name. (default: True)
-        """
-        if not os.path.isdir(dir_name):
-            msg("red", "Error: Directory '{}' not found".format(dir_name), 1)
-
-        for dirpath, _dirnames, files in os.walk(dir_name):
-            for filename in files:
-                object_name = os.path.join(dirpath, filename)
-                self.upload_file(
-                    bucket_name, object_name, keep_structure=keep_structure
-                )
 
     def download_file(self, bucket_name, object_name, *, local_dir="."):
         """
@@ -524,6 +529,28 @@ def cmd_list_obj(s3, args):
 
 
 ##############################################################################
+# Upload a file to S3
+##############################################################################
+def upload_single_file(s3, bucket_name, file_name, nokeepdir):
+    """Upload single file to S3."""
+    # Configure the object name
+    # if nokeepdir, remote the path from key_name, otherwise
+    # the key_name is the same as file_name
+    key_name = file_name.split("/")[-1] if nokeepdir else file_name
+
+    msg("cyan", "Uploading file {} with object name {}".format(file_name, key_name))
+
+    try:
+        s3.upload_file(bucket_name, file_name, key_name)
+    except PermissionError:
+        msg("red", "Error: permission denied to read file {}".format(file_name), 1)
+    except FileNotFoundError:
+        msg("red", "Error: File '{}' not found".format(file_name), 1)
+
+    msg("green", "  - Upload completed successfully")
+
+
+##############################################################################
 # Command to upload file or directory
 ##############################################################################
 def cmd_upload(s3, args):
@@ -532,15 +559,17 @@ def cmd_upload(s3, args):
     if not s3.check_bucket_exist(args.bucket):
         msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
 
-    # If args.keepdir was specified at command line, then set
-    # keep_structure to false, otherwise, set to True
-    keep_structure = not args.nokeepdir
-
     if args.filename:
-        s3.upload_file(args.bucket, args.filename, keep_structure=keep_structure)
+        upload_single_file(s3, args.bucket, args.filename, args.nokeepdir)
 
     if args.dir:
-        s3.upload_dir(args.bucket, args.dir, keep_structure=keep_structure)
+        if not os.path.isdir(args.dir):
+            msg("red", "Error: Directory '{}' not found".format(args.dir), 1)
+
+        for dirpath, _dirnames, files in os.walk(args.dir):
+            for filename in files:
+                file_path = os.path.join(dirpath, filename)
+                upload_single_file(s3, args.bucket, file_path, args.nokeepdir)
 
 
 ##############################################################################
