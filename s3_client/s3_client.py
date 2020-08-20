@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Sample python script to work with S3 buckets and objects.
@@ -56,7 +56,7 @@ def parse_parameters():
     # Add subcommands options
     subparsers = parser.add_subparsers(title="Commands", dest="command")
 
-    # list buckets
+    # List buckets
     listbuckets_parser = subparsers.add_parser("listbuckets", help="List all buckets")
     listbuckets_parser.add_argument(
         "--acl", default=False, action="store_true", help="Show ACL information"
@@ -108,6 +108,12 @@ def parse_parameters():
         default=".",
         dest="localdir",
         help="Local directory to save downloaded " "file. Default current directory",
+    )
+    download_parser.add_argument(
+        "--overwrite",
+        "-o",
+        action="store_true",
+        help="Overwrite local destination file if it exists",
     )
     download_group = download_parser.add_mutually_exclusive_group(required=True)
     download_group.add_argument(
@@ -220,6 +226,28 @@ def msg(color, msg_text, exitcode=0, *, end="\n"):
         sys.exit(exitcode)
 
 
+def create_dir(dir_name):
+    """
+    Create a local directory. It supports nested directory.
+
+    Params:
+        dir_name   (str): Directory to create
+    """
+    # Check if dir_name already exist
+    if os.path.exists(dir_name):
+        if os.path.isfile(dir_name):
+            msg(
+                "red",
+                "Error: path {} exists and is not a directory".format(dir_name),
+                1,
+            )
+    else:
+        try:
+            os.makedirs(dir_name)
+        except PermissionError:
+            msg("red", "Error: PermissionError to create dir {}".format(dir_name), 1)
+
+
 def time_elapsed(func):
     """
     Calculate elapsed time in seconds.
@@ -243,28 +271,6 @@ def time_elapsed(func):
 
     wrapped_f.elapsed = 0
     return wrapped_f
-
-
-def create_dir(local_path):
-    """
-    Create a local directory. It supports nested directory.
-
-    Params:
-        local_path   (str): Directory to create
-    """
-    # Check if local_path already exist
-    if os.path.exists(local_path):
-        if os.path.isfile(local_path):
-            msg(
-                "red",
-                "Error: path {} exists and is not a directory".format(local_path),
-                1,
-            )
-    else:
-        try:
-            os.makedirs(local_path)
-        except PermissionError:
-            msg("red", "Error: PermissionError to create dir {}".format(local_path), 1)
 
 
 class Config:
@@ -355,9 +361,7 @@ class S3:
             An iterable of ObjectSummary resources
         """
         if prefix:
-            return self.s3_resource.Bucket(bucket_name).objects.filter(
-                Delimiter="/", Prefix=prefix,
-            )
+            return self.s3_resource.Bucket(bucket_name).objects.filter(Prefix=prefix,)
         else:
             return self.s3_resource.Bucket(bucket_name).objects.all()
 
@@ -394,74 +398,109 @@ class S3:
             Filename=file_name, Key=key_name,
         )
 
-    def download_file(self, bucket_name, object_name, *, local_dir="."):
+    @time_elapsed
+    def download_object(self, bucket_name, object_name, dest_name):
         """
-        Download an object from S3 to local directory.
+        Download an object from S3 to local source.
 
         Params:
             bucket_name            (str): Bucket name
-            object_name            (str): Object name (file name)
-
-        Keyword arguments:
-            local_dir              (str): Local directory to save downloaded
-                                          files. Default: Current directory
+            object_name            (str): Object name
+            dest_name              (str): Full path filename to store the object
         """
-        log.debug("local_dir: %s", local_dir)
-        log.debug("object_name: %s", object_name)
-        if not local_dir.endswith("/") and not object_name.startswith("/"):
-            dest_name = local_dir + "/" + object_name
-        elif local_dir.endswith("/") and object_name.startswith("/"):
-            dest_name = local_dir + object_name[1:]
-        else:
-            dest_name = local_dir + object_name
+        log.debug("Downloading object %s to dest %s", object_name, dest_name)
 
-        log.debug("dest_name: %s", dest_name)
-        # Check if file exist on local drive
-        if os.path.isfile(dest_name):
-            msg(
-                "red",
-                "Erro: File {} exist. Remove it from local drive to download.".format(
-                    dest_name
-                ),
-                1,
-            )
+        self.s3_resource.Bucket(bucket_name).download_file(object_name, dest_name)
 
-        # If necessary, create directories structure to save
-        # the downloaded file
+
+class Download:
+    """Class to download files."""
+
+    def __init__(self, s3, bucket_name, local_dir):
+        """
+        Initialize Download class.
+
+        Params:
+            s3           (obj): Instance of S3 class
+            bucket_name  (str): Bucket name
+            local_dir    (str): Local directory to save downloaded files
+        """
+        self.s3 = s3
+        self.bucket_name = bucket_name
+        self.local_dir = local_dir
+
+    def download_file(self, object_name, overwrite):
+        """
+        Download a file from S3.
+
+        Params:
+            object_name          (str): Object name to download
+            overwrite     (True/False): Overwrite local file if it already exists
+        """
+        # set full file path to store the object
+        dest_name = self.define_dest_name(object_name)
+
+        if not overwrite:
+            # Check if destination file already exists
+            self.check_file_exist(dest_name)
+
+        # If necessary, create directories structure to save the downloaded file
         local_path = "/".join(dest_name.split("/")[:-1])
         create_dir(local_path)
 
-        msg("cyan", "Downloading {} to dir '{}'".format(object_name, local_dir), end="")
+        msg("cyan", "Downloading object {} to path {}".format(object_name, dest_name))
+
         try:
-            self.s3_resource.Bucket(bucket_name).download_file(object_name, dest_name)
-            msg("green", " Done.")
+            self.s3.download_object(self.bucket_name, object_name, dest_name)
+        except PermissionError:
+            msg("red", "Error: Permission denied to write file {}".format(dest_name), 1)
         except botocore.exceptions.ClientError as error:
             if error.response["Error"]["Code"] == "404":
-                msg("red", " The object '{}' does not exist.".format(object_name))
+                msg("red", "Error:  object '{}' not found.".format(object_name))
             else:
                 raise
 
-    def download_prefix(self, bucket_name, prefix, *, local_dir="."):
+        msg("green", "  - Download completed successfully")
+
+    def download_prefix(self, prefix, overwrite):
         """
-        Download (recursively) all objects with a prefix from S3 to local directory.
+        Download files that start with a prefix from S3.
 
         Params:
-            bucket_name           (str): Bucket name
-            prefix                (str): Prefix of files to download
-
-        Keyword arguments:
-            local_dir             (str): Local directory to save downloaded
-                                         files. Default: Current directory
+            prefix             (str): Object prefix name
+            overwrite   (True/False): Overwrite local file if it already exist
         """
-        msg(
-            "blue",
-            "Downloading files prefix {} from bucket {} to local dir {}".format(
-                prefix, bucket_name, local_dir
-            ),
-        )
+        for obj in self.s3.list_objects(self.bucket_name, prefix):
+            self.download_file(obj.key, overwrite)
 
-        for obj in self.s3_resource.Bucket(bucket_name).objects.filter(Prefix=prefix):
-            self.download_file(bucket_name, obj.key, local_dir=local_dir)
+    def define_dest_name(self, object_name):
+        """
+        Return the full path of the file to store the object.
+
+        Concatenate local_dir with object_name
+        """
+        # Check if its needed to add a '/' between local_dir and object_name
+        if not self.local_dir.endswith("/") and not object_name.startswith("/"):
+            dest_name = self.local_dir + "/" + object_name
+        # Removes duplicated '/' between local_dir and object_name
+        elif self.local_dir.endswith("/") and object_name.startswith("/"):
+            dest_name = self.local_dir + object_name[1:]
+        else:
+            dest_name = self.local_dir + object_name
+
+        return dest_name
+
+    @staticmethod
+    def check_file_exist(file_name):
+        """Check if file exists."""
+        if os.path.isfile(file_name):
+            msg(
+                "red",
+                "Erro: File {} exist. Remove it from local drive to download.".format(
+                    file_name
+                ),
+                1,
+            )
 
 
 ##############################################################################
@@ -534,7 +573,7 @@ def cmd_list_obj(s3, args):
 def upload_single_file(s3, bucket_name, file_name, nokeepdir):
     """Upload single file to S3."""
     # Configure the object name
-    # if nokeepdir, remote the path from key_name, otherwise
+    # if nokeepdir, remove the path from key_name, otherwise
     # the key_name is the same as file_name
     key_name = file_name.split("/")[-1] if nokeepdir else file_name
 
@@ -581,12 +620,19 @@ def cmd_download(s3, args):
     if not s3.check_bucket_exist(args.bucket):
         msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
 
+    # Check if local directory exists
+    if not os.path.exists(args.localdir):
+        msg("red", "Error: directory {} does not exist".format(args.localdir), 1)
+
+    download = Download(s3, args.bucket, args.localdir)
+
     # Download a specific object
     if args.filename:
-        s3.download_file(args.bucket, args.filename, local_dir=args.localdir)
+        download.download_file(args.filename, args.overwrite)
+
     # Download all objects with a prefix
     if args.prefix:
-        s3.download_prefix(args.bucket, args.prefix, local_dir=args.localdir)
+        download.download_prefix(args.prefix, args.overwrite)
 
 
 ##############################################################################
@@ -618,7 +664,7 @@ def main():
 
     s3 = S3(config.aws_access_key_id, config.aws_secret_access_key, args.endpoint,)
 
-    # Execute the funcion (command)
+    # Execute the function (command)
     if args.command is not None:
         args.func(s3, args)
 

@@ -37,6 +37,11 @@ def s3_objects():
 
 
 @pytest.fixture(scope="function")
+def download():
+    return s3_client.Download("s3", "my_bucket", ".")
+
+
+@pytest.fixture(scope="function")
 def tmp_filename(tmpdir):
     """Creates a temporary file and return full pathname."""
     p = tmpdir.join(TMP_FILENAME)
