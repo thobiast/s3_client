@@ -479,7 +479,7 @@ class Download:
             msg("red", "Error: Permission denied to write file {}".format(dest_name), 1)
         except botocore.exceptions.ClientError as error:
             if error.response["Error"]["Code"] == "404":
-                msg("red", "Error:  object '{}' not found.".format(object_name))
+                msg("red", "Error:  object '{}' not found.".format(object_name), 1)
             else:
                 raise
 
