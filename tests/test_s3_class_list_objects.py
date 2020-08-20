@@ -22,3 +22,11 @@ def test_list_objects(s3, s3_objects):
     result = s3.list_objects(BUCKET_NAME)
     assert len(KEY_NAMES) == len([x.key for x in result])
     assert KEY_NAMES[0] == [x.key for x in result][0]
+
+
+@pytest.mark.parametrize("limit", [(1), (2), (3), (4)])
+def test_list_objects_limit(s3, s3_objects, limit):
+    s3_client.log = Mock()
+    result = s3.list_objects(BUCKET_NAME, limit=limit)
+    assert limit == len([x.key for x in result])
+    assert KEY_NAMES[0] == [x.key for x in result][0]

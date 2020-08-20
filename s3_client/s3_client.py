@@ -66,6 +66,14 @@ def parse_parameters():
     # List objects
     list_parser = subparsers.add_parser("listobj", help="List Objects in a bucket")
     list_parser.add_argument(
+        "--limit",
+        "-l",
+        type=int,
+        required=False,
+        default=None,
+        help="Limit the number of objects returned",
+    )
+    list_parser.add_argument(
         "--table", "-t", action="store_true", help="Show output as table"
     )
     list_parser.add_argument(
@@ -348,22 +356,30 @@ class S3:
         """
         return self.s3_resource.buckets.all()
 
-    def list_objects(self, bucket_name, prefix=None):
+    def list_objects(self, bucket_name, *, prefix=None, limit=None):
         """
         List objects stored in a bucket.
 
         Params:
             bucket_name      (str): Bucket name
+
+        Keyword arguments (opt):
             prefix           (str): Filter only objects with specific prefix
+                                    default None
+            limit            (int): Limit the number of objects returned
                                     default None
 
         Returns:
             An iterable of ObjectSummary resources
         """
         if prefix:
-            return self.s3_resource.Bucket(bucket_name).objects.filter(Prefix=prefix,)
+            return (
+                self.s3_resource.Bucket(bucket_name)
+                .objects.filter(Prefix=prefix,)
+                .limit(limit)
+            )
         else:
-            return self.s3_resource.Bucket(bucket_name).objects.all()
+            return self.s3_resource.Bucket(bucket_name).objects.all().limit(limit)
 
     def metadata_object(self, bucket_name, object_name):
         """
@@ -546,7 +562,7 @@ def cmd_list_obj(s3, args):
     if not s3.check_bucket_exist(args.bucket):
         msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
 
-    objects = s3.list_objects(args.bucket, args.prefix)
+    objects = s3.list_objects(args.bucket, prefix=args.prefix, limit=args.limit)
 
     # Resource's attributes:
     attrs = ["key", "size", "storage_class", "e_tag", "last_modified"]
