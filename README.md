@@ -110,21 +110,21 @@ optional arguments:
 
 ```bash
 $ s3-client -e https://s3.amazonaws.com listobj my_bucket
-key: mydir/internal/deep/test4 size: 0 storage_class: STANDARD e_tag: "d41d8cd98f00b204e9800998ecf8427e" last_modified: 2020-08-21 16:40:42.790000+00:00
-key: mydir/internal/deep/test5 size: 0 storage_class: STANDARD e_tag: "d41d8cd98f00b204e9800998ecf8427e" last_modified: 2020-08-21 16:40:42.894000+00:00
-key: mydir/internal/test3 size: 0 storage_class: STANDARD e_tag: "d41d8cd98f00b204e9800998ecf8427e" last_modified: 2020-08-21 16:40:42.655000+00:00
-key: mydir/test1 size: 0 storage_class: STANDARD e_tag: "d41d8cd98f00b204e9800998ecf8427e" last_modified: 2020-08-21 16:40:42.538000+00:00
-key: mydir/test2 size: 0 storage_class: STANDARD e_tag: "d41d8cd98f00b204e9800998ecf8427e" last_modified: 2020-08-21 16:40:42.429000+00:00
+key: mydir/internal/deep/test4 size: 10 storage_class: STANDARD e_tag: "d41d8cd98f00b204e9800998ecf8427e" last_modified: 2020-08-21 16:40:42.790000+00:00
+key: mydir/internal/deep/test5 size: 203 storage_class: STANDARD e_tag: "7c41d8cd98f00b204e9800998ecf8427" last_modified: 2020-08-21 16:40:42.894000+00:00
+key: mydir/internal/test3 size: 42 storage_class: STANDARD e_tag: "9acbdfd98f00b204e9100998ecf8423a" last_modified: 2020-08-21 16:40:42.655000+00:00
+key: mydir/test1 size: 1031 storage_class: STANDARD e_tag: "8acffca98f00b204e98a0821ecf8447e" last_modified: 2020-08-21 16:40:42.538000+00:00
+key: mydir/test2 size: 121 storage_class: STANDARD e_tag: "d3ab64d98f00b20401800998ecf8438b" last_modified: 2020-08-21 16:40:42.429000+00:00
 
 
 $ s3-client -e https://s3.amazonaws.com listobj my_bucket -t
 | key                       |   size | storage_class   | e_tag                              | last_modified                    |
 |---------------------------|--------|-----------------|------------------------------------|----------------------------------|
-| mydir/internal/deep/test4 |      0 | STANDARD        | "d41d8cd98f00b204e9800998ecf8427e" | 2020-08-21 16:40:42.790000+00:00 |
-| mydir/internal/deep/test5 |      0 | STANDARD        | "d41d8cd98f00b204e9800998ecf8427e" | 2020-08-21 16:40:42.894000+00:00 |
-| mydir/internal/test3      |      0 | STANDARD        | "d41d8cd98f00b204e9800998ecf8427e" | 2020-08-21 16:40:42.655000+00:00 |
-| mydir/test1               |      0 | STANDARD        | "d41d8cd98f00b204e9800998ecf8427e" | 2020-08-21 16:40:42.538000+00:00 |
-| mydir/test2               |      0 | STANDARD        | "d41d8cd98f00b204e9800998ecf8427e" | 2020-08-21 16:40:42.429000+00:00 |
+| mydir/internal/deep/test4 |     10 | STANDARD        | "d41d8cd98f00b204e9800998ecf8427e" | 2020-08-21 16:40:42.790000+00:00 |
+| mydir/internal/deep/test5 |    203 | STANDARD        | "7c41d8cd98f00b204e9800998ecf8427" | 2020-08-21 16:40:42.894000+00:00 |
+| mydir/internal/test3      |     42 | STANDARD        | "9acbdfd98f00b204e9100998ecf8423a" | 2020-08-21 16:40:42.655000+00:00 |
+| mydir/test1               |   1031 | STANDARD        | "8acffca98f00b204e98a0821ecf8447e" | 2020-08-21 16:40:42.538000+00:00 |
+| mydir/test2               |    121 | STANDARD        | "d3ab64d98f00b20401800998ecf8438b" | 2020-08-21 16:40:42.429000+00:00 |
 ```
 
 #### Download objects
