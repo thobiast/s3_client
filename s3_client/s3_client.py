@@ -77,7 +77,7 @@ def parse_parameters():
         "--table", "-t", action="store_true", help="Show output as table"
     )
     list_parser.add_argument(
-        "--prefix", "-p", required=False, help="Only objects with specificrefix"
+        "--prefix", "-p", required=False, help="Only objects with specific prefix"
     )
     list_parser.add_argument("bucket", help="Bucket Name")
     list_parser.set_defaults(func=cmd_list_obj)
@@ -95,8 +95,7 @@ def parse_parameters():
         "--nokeepdir",
         default=False,
         action="store_true",
-        help="Do not keep local directory structure \
-                                    on uploaded objects names",
+        help="Do not keep local directory structure on uploaded objects names",
     )
     upload_group = upload_parser.add_mutually_exclusive_group(required=True)
     upload_group.add_argument("--file", "-f", dest="filename", help="File to upload")
