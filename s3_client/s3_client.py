@@ -3,7 +3,7 @@
 """
 Sample python script to work with S3 buckets and objects.
 
-This package performs basic s3 operations.
+This package performs basic S3 operations.
 """
 
 import argparse
@@ -64,7 +64,7 @@ def parse_parameters():
     listbuckets_parser.set_defaults(func=cmd_list_buckets)
 
     # List objects
-    list_parser = subparsers.add_parser("listobj", help="List Objects in a bucket")
+    list_parser = subparsers.add_parser("listobj", help="List objects in a bucket")
     list_parser.add_argument(
         "--limit",
         "-l",
@@ -83,7 +83,7 @@ def parse_parameters():
     list_parser.set_defaults(func=cmd_list_obj)
 
     # Metadata objects
-    metadata_parser = subparsers.add_parser("metadataobj", help="List Objects Metadata")
+    metadata_parser = subparsers.add_parser("metadataobj", help="List object metadata")
     metadata_parser.add_argument("bucket", help="Bucket Name")
     metadata_parser.add_argument("object", help="Object Key Name")
     metadata_parser.set_defaults(func=cmd_metadata_obj)
@@ -115,13 +115,13 @@ def parse_parameters():
         "-l",
         default=".",
         dest="localdir",
-        help="Local directory to save downloaded " "file. Default current directory",
+        help="Local directory to save downloaded file. Default current directory",
     )
     download_parser.add_argument(
         "--overwrite",
         "-o",
         action="store_true",
-        help="Overwrite local destination file if it exists",
+        help="Overwrite local destination file if it exists. Default false",
     )
     download_group = download_parser.add_mutually_exclusive_group(required=True)
     download_group.add_argument(
@@ -131,7 +131,7 @@ def parse_parameters():
         "--prefix",
         "-p",
         dest="prefix",
-        help="Download recursively all files " "with a prefix.",
+        help="Download recursively all files with a prefix.",
     )
     download_parser.set_defaults(func=cmd_download)
 
@@ -279,7 +279,7 @@ def time_elapsed(func):
         # keep track of total elapsed time for all execution of the function
         wrapped_f.elapsed += elapsed_time
 
-        output = "  - Elapsed time {:.4f} seconds ".format(elapsed_time)
+        output = "  - Elapsed time {:.4f} seconds".format(elapsed_time)
         msg("nocolor", output)
 
         return result
@@ -493,7 +493,7 @@ class Download:
             prefix             (str): Object prefix name
             overwrite   (True/False): Overwrite local file if it already exist
         """
-        for obj in self.s3.list_objects(self.bucket_name, prefix):
+        for obj in self.s3.list_objects(self.bucket_name, prefix=prefix):
             self.download_file(obj.key, overwrite)
 
     def define_dest_name(self, object_name):
@@ -519,7 +519,7 @@ class Download:
         if os.path.isfile(file_name):
             msg(
                 "red",
-                "Erro: File {} exist. Remove it from local drive to download.".format(
+                "Error: File {} exist. Remove it from local drive to download.".format(
                     file_name
                 ),
                 1,
@@ -573,6 +573,7 @@ def cmd_list_obj(s3, args):
 
     # Resource's attributes:
     attrs = ["key", "size", "storage_class", "e_tag", "last_modified"]
+
     if args.table:
         # Tabulate needs to keep the entire table in-memory
         table = []
