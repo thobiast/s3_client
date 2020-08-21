@@ -4,13 +4,6 @@
 
 import setuptools
 
-# Package meta-data.
-NAME = "s3_client"
-DESCRIPTION = "Sample python script to work with Amazon S3."
-URL = "https://github.com/thobiast/s3_client"
-AUTHOR = "Thobias Salazar Trevisan"
-VERSION = "0.1.0"
-
 
 def read_file(fname):
     """Read file and return the its content."""
@@ -18,13 +11,26 @@ def read_file(fname):
         return f.read()
 
 
+def get_attr(fname, attr):
+    """Read file and return specific "attribute" content."""
+    lines = read_file(fname)
+    for line in lines.splitlines():
+        if line.startswith(attr):
+            delim = '"' if '"' in line else "'"
+            return line.split(delim)[1]
+    raise RuntimeError("Unable to find string.")
+
+
+ver_file = "s3_client/__version__.py"
+init_file = "s3_client/__init__.py"
+
 setuptools.setup(
-    name=NAME,
-    version=VERSION,
-    description=DESCRIPTION,
-    author=AUTHOR,
-    url=URL,
-    license="MIT",
+    name=get_attr(init_file, "__name__"),
+    version=get_attr(ver_file, "__version__"),
+    description=get_attr(init_file, "__description__"),
+    author=get_attr(init_file, "__author__"),
+    url=get_attr(init_file, "__url__"),
+    license=get_attr(init_file, "__license__"),
     long_description=read_file("README.md"),
     long_description_content_type="text/markdown",
     install_requires=read_file("requirements.txt").splitlines(),
@@ -44,7 +50,7 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     # flake8: noqa: E231
-    entry_points={"console_scripts": ["s3_client=s3_client.s3_client:main",],},
+    entry_points={"console_scripts": ["s3-client=s3_client.s3_client:main",],},
 )
 
 # vim: ts=4

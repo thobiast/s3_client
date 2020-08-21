@@ -1,5 +1,4 @@
-pprint
 boto3
 botocore
-prettytable
+tabulate
 urllib3
