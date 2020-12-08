@@ -31,16 +31,11 @@ def parse_parameters():
     # epilog message: Custom text after the help
     epilog = """
     Example of use:
-        %s -e https://s3.amazonaws.com listbuckets
-        %s -e https://s3.amazonaws.com listobj my_bucket -t
-        %s -e https://s3.amazonaws.com upload my_bucket -f file1
-        %s -e https://s3.amazonaws.com upload my_bucket -d mydir
-    """ % (
-        sys.argv[0],
-        sys.argv[0],
-        sys.argv[0],
-        sys.argv[0],
-    )
+        %(prog)s -e https://s3.amazonaws.com listbuckets
+        %(prog)s -e https://s3.amazonaws.com listobj my_bucket -t
+        %(prog)s -e https://s3.amazonaws.com upload my_bucket -f file1
+        %(prog)s -e https://s3.amazonaws.com upload my_bucket -d mydir
+    """
     # Create the argparse object and define global options
     parser = argparse.ArgumentParser(
         description="S3 Client sample script",
