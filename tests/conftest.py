@@ -12,6 +12,8 @@ KEY_NAMES = ["A", "B", "t01", "t02", "test01", "test02", "test03"]
 
 TMP_FILENAME = "my_file"
 
+REGION_NAME = "us-east-1"
+
 
 @pytest.fixture(scope="function")
 def s3():
@@ -21,7 +23,7 @@ def s3():
 @pytest.fixture(scope="function")
 def s3_bucket():
     with moto.mock_s3():
-        conn = boto3.resource("s3")
+        conn = boto3.resource("s3", region_name=REGION_NAME)
         conn.create_bucket(Bucket=BUCKET_NAME)
         yield conn
 
@@ -29,7 +31,7 @@ def s3_bucket():
 @pytest.fixture(scope="function")
 def s3_objects():
     with moto.mock_s3():
-        conn = boto3.resource("s3")
+        conn = boto3.resource("s3", region_name=REGION_NAME)
         conn.create_bucket(Bucket=BUCKET_NAME)
         for key_name in KEY_NAMES:
             conn.meta.client.put_object(Bucket=BUCKET_NAME, Key=key_name, Body="body")
