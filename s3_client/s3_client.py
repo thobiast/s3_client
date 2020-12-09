@@ -81,6 +81,14 @@ def parse_parameters():
     list_parser.add_argument("bucket", help="Bucket Name")
     list_parser.set_defaults(func=cmd_list_obj)
 
+    # Delete object
+    deleteobj_parser = subparsers.add_parser(
+        "deleteobj", help="Delete object in a bucket"
+    )
+    deleteobj_parser.add_argument("bucket", help="Bucket Name")
+    deleteobj_parser.add_argument("object", help="Object Key Name")
+    deleteobj_parser.set_defaults(func=cmd_delete_obj)
+
     # Metadata objects
     metadata_parser = subparsers.add_parser("metadataobj", help="List object metadata")
     metadata_parser.add_argument("bucket", help="Bucket Name")
@@ -402,6 +410,17 @@ class S3:
             Bucket=bucket_name, Key=object_name
         )
 
+    def delete_object(self, bucket_name, object_name):
+        """
+        Delete an object.
+
+        Params:
+            bucket_name           (str): Bucket name
+            object_name           (str): Object key name
+        """
+        obj = [{"Key": object_name}]
+        self.s3_resource.Bucket(bucket_name).delete_objects(Delete={"Objects": obj})
+
     @time_elapsed
     def upload_file(self, bucket_name, file_name, key_name=None):
         """
@@ -545,6 +564,18 @@ def cmd_metadata_obj(s3, args):
             msg("red", "Error: key '{}' not found".format(args.object), 1)
         else:
             raise
+
+
+##############################################################################
+# Delete object
+##############################################################################
+def cmd_delete_obj(s3, args):
+    """Handle delete object option."""
+    # Check if bucket exist
+    if not s3.check_bucket_exist(args.bucket):
+        msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
+
+    s3.delete_object(args.bucket, args.object)
 
 
 ##############################################################################
