@@ -376,7 +376,9 @@ class S3:
         if prefix:
             return (
                 self.s3_resource.Bucket(bucket_name)
-                .objects.filter(Prefix=prefix,)
+                .objects.filter(
+                    Prefix=prefix,
+                )
                 .limit(limit)
             )
         else:
@@ -412,7 +414,8 @@ class S3:
         log.debug("Uploading file: %s with key: %s", file_name, key_name)
 
         self.s3_resource.Bucket(bucket_name).upload_file(
-            Filename=file_name, Key=key_name,
+            Filename=file_name,
+            Key=key_name,
         )
 
     @time_elapsed
@@ -680,7 +683,11 @@ def main():
     except ValueError as error:
         msg("red", str(error), 1)
 
-    s3 = S3(config.aws_access_key_id, config.aws_secret_access_key, args.endpoint,)
+    s3 = S3(
+        config.aws_access_key_id,
+        config.aws_secret_access_key,
+        args.endpoint,
+    )
 
     # Execute the function (command)
     if args.command is not None:

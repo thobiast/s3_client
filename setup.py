@@ -50,7 +50,11 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     # flake8: noqa: E231
-    entry_points={"console_scripts": ["s3-client=s3_client.s3_client:main",],},
+    entry_points={
+        "console_scripts": [
+            "s3-client=s3_client.s3_client:main",
+        ],
+    },
 )
 
 # vim: ts=4
