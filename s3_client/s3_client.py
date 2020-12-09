@@ -31,7 +31,8 @@ def parse_parameters():
     # epilog message: Custom text after the help
     epilog = """
     Example of use:
-        %(prog)s -e https://s3.amazonaws.com listbuckets
+        %(prog)s listbuckets
+        %(prog)s -r us-east-1 listbuckets
         %(prog)s -e https://s3.amazonaws.com listobj my_bucket -t
         %(prog)s -e https://s3.amazonaws.com upload my_bucket -f file1
         %(prog)s -e https://s3.amazonaws.com upload my_bucket -d mydir
@@ -47,6 +48,9 @@ def parse_parameters():
     )
     parser.add_argument(
         "--endpoint", "-e", default=None, dest="endpoint", help="S3 endpoint URL"
+    )
+    parser.add_argument(
+        "--region", "-r", default=None, dest="region_name", help="S3 Region Name"
     )
     # Add subcommands options
     subparsers = parser.add_subparsers(title="Commands", dest="command")
@@ -303,7 +307,7 @@ class Config:
 class S3:
     """Class to handle S3 operations."""
 
-    def __init__(self, key, secret, s3_endpoint):
+    def __init__(self, key, secret, s3_endpoint, region_name):
         """
         Initialize s3 class.
 
@@ -311,11 +315,13 @@ class S3:
             key           (str): AWS_ACCESS_KEY_ID
             secret        (str): AWS_SECRET_ACCESS_KEY
             s3_endpoint   (str): S3 endpoint URL
+            region_name   (str): Region Name
         """
         self.s3_resource = boto3.resource(
             "s3",
             endpoint_url=s3_endpoint,
             verify=False,
+            region_name=region_name,
             aws_access_key_id=key,
             aws_secret_access_key=secret,
         )
@@ -687,6 +693,7 @@ def main():
         config.aws_access_key_id,
         config.aws_secret_access_key,
         args.endpoint,
+        args.region_name,
     )
 
     # Execute the function (command)

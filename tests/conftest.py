@@ -17,7 +17,9 @@ REGION_NAME = "us-east-1"
 
 @pytest.fixture(scope="function")
 def s3():
-    return s3_client.S3("aws_key_id", "aws_access_key", "https://s3.amazonaws.com")
+    return s3_client.S3(
+        "aws_key_id", "aws_access_key", "https://s3.amazonaws.com", REGION_NAME
+    )
 
 
 @pytest.fixture(scope="function")
