@@ -71,11 +71,12 @@ Bucket_Name: test-script2 Creation_Date: 2019-03-22 19:50:35.706000+00:00
 ```bash
 $ s3-client -e https://s3.amazonaws.com upload my_bucket -f my_file.csv
 Uploading file my_file.csv with object name my_file.csv
-  - Elapsed time 0.2451 seconds
+data transferred: 100%|█████████████████████████████████████████████████████████████| 8.39M/8.39M [00:16<00:00, 520kB/s]
+  - Elapsed time 16.1471 seconds
   - Upload completed successfully
 
 
-$ s3-client -e https://s3.amazonaws.com upload my_bucket -d mydir/
+$ s3-client -e https://s3.amazonaws.com upload my_bucket -d mydir/ --nopbar
 Uploading file mydir/test2 with object name mydir/test2
   - Elapsed time 0.1007 seconds
   - Upload completed successfully
@@ -135,19 +136,20 @@ $ s3-client -e https://s3.amazonaws.com listobj my_bucket -t
 
 ```bash
 $ s3-client -e https://s3.amazonaws.com download -h
-usage: s3-client download [-h] [--localdir LOCALDIR] [--overwrite] (--file FILENAME | --prefix PREFIX) bucket
+usage: s3-client download [-h] [--nopbar] [-l LOCALDIR] [-o] (-f FILENAME | -p PREFIX) bucket
 
 positional arguments:
   bucket                Bucket Name
 
 optional arguments:
   -h, --help            show this help message and exit
-  --localdir LOCALDIR, -l LOCALDIR
+  --nopbar              Disable progress bar
+  -l LOCALDIR, --localdir LOCALDIR
                         Local directory to save downloaded file. Default current directory
-  --overwrite, -o       Overwrite local destination file if it exists. Default false
-  --file FILENAME, -f FILENAME
+  -o, --overwrite       Overwrite local destination file if it exists. Default false
+  -f FILENAME, --file FILENAME
                         Download a specific file
-  --prefix PREFIX, -p PREFIX
+  -p PREFIX, --prefix PREFIX
                         Download recursively all files with a prefix.
 ```
 
@@ -157,14 +159,16 @@ Error: File ./mydir/test1 exist. Remove it from local drive to download.
 
 $ s3-client -e https://s3.amazonaws.com download my_bucket -f mydir/test1 --overwrite
 Downloading object mydir/test1 to path ./mydir/test1
-  - Elapsed time 0.0699 seconds
+data transferred: 100%|███████████████████████████████████████████████| 5.24M/5.24M [00:11<00:00, 468kB/s]
+  - Elapsed time 11.3103 seconds
   - Download completed successfully
 ```
 
 ```bash
 $ s3-client -e https://s3.amazonaws.com download my_bucket -f mydir/test1 -l /tmp/
 Downloading object mydir/test1 to path /tmp/mydir/test1
-  - Elapsed time 0.0593 seconds
+data transferred: 100%|███████████████████████████████████████████████| 5.24M/5.24M [00:11<00:00, 468kB/s]
+  - Elapsed time 11.3103 seconds
   - Download completed successfully
 
 $ ls /tmp/mydir/test1

@@ -20,6 +20,8 @@ import botocore
 
 import tabulate
 
+import tqdm
+
 import urllib3
 
 
@@ -102,6 +104,11 @@ def parse_parameters():
     upload_parser = subparsers.add_parser("upload", help="Upload files to bucket")
     upload_parser.add_argument("bucket", help="Bucket Name")
     upload_parser.add_argument(
+        "--nopbar",
+        action="store_true",
+        help="Disable progress bar",
+    )
+    upload_parser.add_argument(
         "--nokeepdir",
         default=False,
         action="store_true",
@@ -119,6 +126,11 @@ def parse_parameters():
         "download", help="Download files from bucket"
     )
     download_parser.add_argument("bucket", help="Bucket Name")
+    download_parser.add_argument(
+        "--nopbar",
+        action="store_true",
+        help="Disable progress bar",
+    )
     download_parser.add_argument(
         "-l",
         "--localdir",
@@ -315,6 +327,19 @@ class Config:
         return os.environ.get(var)
 
 
+class ProgressBar(tqdm.tqdm):
+    """Class to display progress bar."""
+
+    def update_to(self, bytes_sent):
+        """
+        Update tqdm status bar.
+
+        Params:
+            bytes_sent    (int): number of bytes transferred
+        """
+        return self.update(bytes_sent)
+
+
 class S3:
     """Class to handle S3 operations."""
 
@@ -336,6 +361,7 @@ class S3:
             aws_access_key_id=key,
             aws_secret_access_key=secret,
         )
+        self.disable_pbar = False
         self.buckets_exist = []
 
     def check_bucket_exist(self, bucket_name):
@@ -482,10 +508,20 @@ class S3:
 
         log.debug("Uploading file: %s with key: %s", file_name, key_name)
 
-        self.s3_resource.Bucket(bucket_name).upload_file(
-            Filename=file_name,
-            Key=key_name,
-        )
+        obj_size = os.path.getsize(file_name)
+        with ProgressBar(
+            unit="B",
+            unit_scale=True,
+            desc="data transferred",
+            total=obj_size,
+            miniters=1,
+            disable=self.disable_pbar,
+        ) as pbar:
+            self.s3_resource.Bucket(bucket_name).upload_file(
+                Filename=file_name,
+                Key=key_name,
+                Callback=pbar.update_to,
+            )
 
     @time_elapsed
     def download_object(self, bucket_name, object_name, dest_name):
@@ -499,7 +535,18 @@ class S3:
         """
         log.debug("Downloading object %s to dest %s", object_name, dest_name)
 
-        self.s3_resource.Bucket(bucket_name).download_file(object_name, dest_name)
+        obj_size = self.s3_resource.ObjectSummary(bucket_name, object_name).size
+        with ProgressBar(
+            unit="B",
+            unit_scale=True,
+            desc="data transferred",
+            total=obj_size,
+            miniters=1,
+            disable=self.disable_pbar,
+        ) as pbar:
+            self.s3_resource.Bucket(bucket_name).download_file(
+                object_name, dest_name, Callback=pbar.update_to
+            )
 
 
 class Download:
@@ -716,6 +763,8 @@ def cmd_upload(s3, args):
     if not s3.check_bucket_exist(args.bucket):
         msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
 
+    s3.disable_pbar = args.nopbar
+
     if args.filename:
         upload_single_file(s3, args.bucket, args.filename, args.nokeepdir)
 
@@ -737,6 +786,8 @@ def cmd_download(s3, args):
     # Check if bucket exist
     if not s3.check_bucket_exist(args.bucket):
         msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
+
+    s3.disable_pbar = args.nopbar
 
     # Check if local directory exists
     if not os.path.exists(args.localdir):
