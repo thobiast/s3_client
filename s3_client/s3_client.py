@@ -44,13 +44,13 @@ def parse_parameters():
         epilog=epilog,
     )
     parser.add_argument(
-        "--debug", "-d", action="store_true", dest="debug", help="debug flag"
+        "-d", "--debug", action="store_true", dest="debug", help="debug flag"
     )
     parser.add_argument(
-        "--endpoint", "-e", default=None, dest="endpoint", help="S3 endpoint URL"
+        "-e", "--endpoint", default=None, dest="endpoint", help="S3 endpoint URL"
     )
     parser.add_argument(
-        "--region", "-r", default=None, dest="region_name", help="S3 Region Name"
+        "-r", "--region", default=None, dest="region_name", help="S3 Region Name"
     )
     # Add subcommands options
     subparsers = parser.add_subparsers(title="Commands", dest="command")
@@ -65,18 +65,18 @@ def parse_parameters():
     # List objects
     list_parser = subparsers.add_parser("listobj", help="List objects in a bucket")
     list_parser.add_argument(
-        "--limit",
         "-l",
+        "--limit",
         type=int,
         required=False,
         default=None,
         help="Limit the number of objects returned",
     )
     list_parser.add_argument(
-        "--table", "-t", action="store_true", help="Show output as table"
+        "-t", "--table", action="store_true", help="Show output as table"
     )
     list_parser.add_argument(
-        "--prefix", "-p", required=False, help="Only objects with specific prefix"
+        "-p", "--prefix", required=False, help="Only objects with specific prefix"
     )
     list_parser.add_argument("bucket", help="Bucket Name")
     list_parser.set_defaults(func=cmd_list_obj)
@@ -105,9 +105,9 @@ def parse_parameters():
         help="Do not keep local directory structure on uploaded objects names",
     )
     upload_group = upload_parser.add_mutually_exclusive_group(required=True)
-    upload_group.add_argument("--file", "-f", dest="filename", help="File to upload")
+    upload_group.add_argument("-f", "--file", dest="filename", help="File to upload")
     upload_group.add_argument(
-        "--dir", "-d", dest="dir", help="Directory to upload all files recursively"
+        "-d", "--dir", dest="dir", help="Directory to upload all files recursively"
     )
     upload_parser.set_defaults(func=cmd_upload)
 
@@ -117,25 +117,25 @@ def parse_parameters():
     )
     download_parser.add_argument("bucket", help="Bucket Name")
     download_parser.add_argument(
-        "--localdir",
         "-l",
+        "--localdir",
         default=".",
         dest="localdir",
         help="Local directory to save downloaded file. Default current directory",
     )
     download_parser.add_argument(
-        "--overwrite",
         "-o",
+        "--overwrite",
         action="store_true",
         help="Overwrite local destination file if it exists. Default false",
     )
     download_group = download_parser.add_mutually_exclusive_group(required=True)
     download_group.add_argument(
-        "--file", "-f", dest="filename", help="Download a specific file"
+        "-f", "--file", dest="filename", help="Download a specific file"
     )
     download_group.add_argument(
-        "--prefix",
         "-p",
+        "--prefix",
         dest="prefix",
         help="Download recursively all files with a prefix.",
     )

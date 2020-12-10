@@ -27,26 +27,30 @@ Authorization is performed using environment variables:
 
 ```bash
 $ s3-client
-usage: s3-client [-h] [--debug] [--endpoint ENDPOINT] {listbuckets,listobj,metadataobj,upload,download} ...
+usage: s3-client [-h] [-d] [-e ENDPOINT] [-r REGION_NAME] {listbuckets,listobj,deleteobj,metadataobj,upload,download} ...
 
 S3 Client sample script
 
 optional arguments:
   -h, --help            show this help message and exit
-  --debug, -d           debug flag
-  --endpoint ENDPOINT, -e ENDPOINT
+  -d, --debug           debug flag
+  -e ENDPOINT, --endpoint ENDPOINT
                         S3 endpoint URL
+  -r REGION_NAME, --region REGION_NAME
+                        S3 Region Name
 
 Commands:
-  {listbuckets,listobj,metadataobj,upload,download}
+  {listbuckets,listobj,deleteobj,metadataobj,upload,download}
     listbuckets         List all buckets
     listobj             List objects in a bucket
+    deleteobj           Delete object in a bucket
     metadataobj         List object metadata
     upload              Upload files to bucket
     download            Download files from bucket
 
     Example of use:
-        s3-client -e https://s3.amazonaws.com listbuckets
+        s3-client listbuckets
+        s3-client -r us-east-1 listbuckets
         s3-client -e https://s3.amazonaws.com listobj my_bucket -t
         s3-client -e https://s3.amazonaws.com upload my_bucket -f file1
         s3-client -e https://s3.amazonaws.com upload my_bucket -d mydir
