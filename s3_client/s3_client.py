@@ -78,6 +78,9 @@ def parse_parameters():
     list_parser.add_argument(
         "-p", "--prefix", required=False, help="Only objects with specific prefix"
     )
+    list_parser.add_argument(
+        "-v", "--versions", action="store_true", help="Show all object versions"
+    )
     list_parser.add_argument("bucket", help="Bucket Name")
     list_parser.set_defaults(func=cmd_list_obj)
 
@@ -410,6 +413,35 @@ class S3:
         else:
             return self.s3_resource.Bucket(bucket_name).objects.all().limit(limit)
 
+    def list_objects_versions(self, bucket_name, *, prefix=None, limit=None):
+        """
+        List all objects versions stored in a bucket.
+
+        Params:
+            bucket_name      (str): Bucket name
+
+        Keyword arguments (opt):
+            prefix           (str): Filter only objects with specific prefix
+                                    default None
+            limit            (int): Limit the number of objects returned
+                                    default None
+
+        Returns:
+            An iterable of ObjectVersion resources
+        """
+        if prefix:
+            return (
+                self.s3_resource.Bucket(bucket_name)
+                .object_versions.filter(
+                    Prefix=prefix,
+                )
+                .limit(limit)
+            )
+        else:
+            return (
+                self.s3_resource.Bucket(bucket_name).object_versions.all().limit(limit)
+            )
+
     def metadata_object(self, bucket_name, object_name):
         """
         Return object metadata.
@@ -602,8 +634,7 @@ def cmd_list_buckets(s3, args):
             msg("nocolor", getattr(bucket, attr), end=" ")
         versioning = s3.check_bucket_versioning(bucket.name)
         msg("cyan", "versioning_status", end=": ")
-        msg("nocolor", versioning, end=" ")
-        msg("nocolor", "")
+        msg("nocolor", versioning)
         if args.acl:
             msg("cyan", "  acl: ")
             msg("nocolor", "   {}".format(pprint.pformat(bucket.Acl().grants)))
@@ -618,10 +649,24 @@ def cmd_list_obj(s3, args):
     if not s3.check_bucket_exist(args.bucket):
         msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
 
-    objects = s3.list_objects(args.bucket, prefix=args.prefix, limit=args.limit)
-
-    # Resource's attributes:
-    attrs = ["key", "size", "storage_class", "e_tag", "last_modified"]
+    if args.versions:
+        objects = s3.list_objects_versions(
+            args.bucket, prefix=args.prefix, limit=args.limit
+        )
+        # Resource's attributes:
+        attrs = [
+            "key",
+            "size",
+            "storage_class",
+            "e_tag",
+            "last_modified",
+            "version_id",
+            "is_latest",
+        ]
+    else:
+        objects = s3.list_objects(args.bucket, prefix=args.prefix, limit=args.limit)
+        # Resource's attributes:
+        attrs = ["key", "size", "storage_class", "e_tag", "last_modified"]
 
     if args.table:
         # Tabulate needs to keep the entire table in-memory
