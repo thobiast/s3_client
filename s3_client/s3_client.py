@@ -362,6 +362,18 @@ class S3:
             else:
                 raise
 
+    def check_bucket_versioning(self, bucket_name):
+        """
+        Return bucket versioning status.
+
+        Params:
+            bucket_name           (str): Bucket name
+
+        Return:
+            (str)
+        """
+        return self.s3_resource.BucketVersioning(bucket_name).status
+
     def list_buckets(self):
         """
         List all buckets.
@@ -588,6 +600,9 @@ def cmd_list_buckets(s3, args):
         for attr in attrs:
             msg("cyan", attr, end=": ")
             msg("nocolor", getattr(bucket, attr), end=" ")
+        versioning = s3.check_bucket_versioning(bucket.name)
+        msg("cyan", "versioning_status", end=": ")
+        msg("nocolor", versioning, end=" ")
         msg("nocolor", "")
         if args.acl:
             msg("cyan", "  acl: ")
