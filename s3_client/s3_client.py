@@ -92,6 +92,14 @@ def parse_parameters():
     )
     deleteobj_parser.add_argument("bucket", help="Bucket Name")
     deleteobj_parser.add_argument("object", help="Object Key Name")
+    deleteobj_parser.add_argument(
+        "-v",
+        "--versionid",
+        dest="versionid",
+        help="""
+        Object version id (in a versioning bucket this really delete the object version)
+        """,
+    )
     deleteobj_parser.set_defaults(func=cmd_delete_obj)
 
     # Metadata objects
@@ -480,16 +488,22 @@ class S3:
             Bucket=bucket_name, Key=object_name
         )
 
-    def delete_object(self, bucket_name, object_name):
+    def delete_object(self, bucket_name, object_name, version_id=None):
         """
         Delete an object.
 
         Params:
             bucket_name           (str): Bucket name
             object_name           (str): Object key name
+            version_id            (str): Object version id
         """
-        obj = [{"Key": object_name}]
-        self.s3_resource.Bucket(bucket_name).delete_objects(Delete={"Objects": obj})
+        obj = {"Key": object_name}
+        if version_id:
+            obj["VersionId"] = version_id
+
+        return self.s3_resource.Bucket(bucket_name).delete_objects(
+            Delete={"Objects": [obj]}
+        )
 
     @time_elapsed
     def upload_file(self, bucket_name, file_name, key_name=None):
@@ -666,7 +680,8 @@ def cmd_delete_obj(s3, args):
     if not s3.check_bucket_exist(args.bucket):
         msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
 
-    s3.delete_object(args.bucket, args.object)
+    resp = s3.delete_object(args.bucket, args.object, args.versionid)
+    pprint.pprint(resp["Deleted"])
 
 
 ##############################################################################
