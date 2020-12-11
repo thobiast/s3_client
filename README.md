@@ -62,8 +62,8 @@ Commands:
 
 ```bash
 $ s3-client -e https://s3.amazonaws.com listbuckets
-Bucket_Name: test-script1 Creation_Date: 2019-03-22 19:40:36.379000+00:00
-Bucket_Name: test-script2 Creation_Date: 2019-03-22 19:50:35.706000+00:00
+Bucket_Name: test-script1 Creation_Date: 2019-03-22 19:40:36.379000+00:00 versioning_status: None
+Bucket_Name: test-script2 Creation_Date: 2019-03-22 19:50:35.706000+00:00 versioning_status: Enabled
 ```
 
 #### Upload file(s)
@@ -98,18 +98,19 @@ Uploading file mydir/internal/deep/test5 with object name mydir/internal/deep/te
 
 ```bash
 $ s3-client listobj -h
-usage: s3-client listobj [-h] [--limit LIMIT] [--table] [--prefix PREFIX] bucket
+usage: s3-client listobj [-h] [-l LIMIT] [-t] [-p PREFIX] [-v] bucket
 
 positional arguments:
   bucket                Bucket Name
 
 optional arguments:
   -h, --help            show this help message and exit
-  --limit LIMIT, -l LIMIT
+  -l LIMIT, --limit LIMIT
                         Limit the number of objects returned
-  --table, -t           Show output as table
-  --prefix PREFIX, -p PREFIX
+  -t, --table           Show output as table
+  -p PREFIX, --prefix PREFIX
                         Only objects with specific prefix
+  -v, --versions        Show all object versions
 ```
 
 
@@ -136,7 +137,7 @@ $ s3-client -e https://s3.amazonaws.com listobj my_bucket -t
 
 ```bash
 $ s3-client -e https://s3.amazonaws.com download -h
-usage: s3-client download [-h] [--nopbar] [-l LOCALDIR] [-o] (-f FILENAME | -p PREFIX) bucket
+usage: s3-client download [-h] [--nopbar] [-l LOCALDIR] [-o] [-v VERSIONID] (-f FILENAME | -p PREFIX) bucket
 
 positional arguments:
   bucket                Bucket Name
@@ -147,6 +148,8 @@ optional arguments:
   -l LOCALDIR, --localdir LOCALDIR
                         Local directory to save downloaded file. Default current directory
   -o, --overwrite       Overwrite local destination file if it exists. Default false
+  -v VERSIONID, --versionid VERSIONID
+                        Object version id
   -f FILENAME, --file FILENAME
                         Download a specific file
   -p PREFIX, --prefix PREFIX

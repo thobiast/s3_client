@@ -152,6 +152,11 @@ def parse_parameters():
         action="store_true",
         help="Overwrite local destination file if it exists. Default false",
     )
+    download_parser.add_argument(
+        "-v",
+        "--versionid",
+        help="Object version id",
+    )
     download_group = download_parser.add_mutually_exclusive_group(required=True)
     download_group.add_argument(
         "-f", "--file", dest="filename", help="Download a specific file"
@@ -538,7 +543,7 @@ class S3:
             )
 
     @time_elapsed
-    def download_object(self, bucket_name, object_name, dest_name):
+    def download_object(self, bucket_name, object_name, dest_name, versionid=None):
         """
         Download an object from S3 to local source.
 
@@ -546,10 +551,24 @@ class S3:
             bucket_name            (str): Bucket name
             object_name            (str): Object name
             dest_name              (str): Full path filename to store the object
+            versionid             (str): Object version id
         """
         log.debug("Downloading object %s to dest %s", object_name, dest_name)
 
-        obj_size = self.s3_resource.ObjectSummary(bucket_name, object_name).size
+        if versionid:
+            extraargs = {"VersionId": versionid}
+            resp = self.s3_resource.ObjectVersion(
+                bucket_name, object_name, versionid
+            ).head()
+            obj_size = resp["ContentLength"]
+            # Change to 'size' attribute when this boto3 bug got fixed:
+            # https://github.com/boto/boto3/issues/832
+            # self.s3_resource.ObjectVersion(bucket_name, object_name, versionid).size
+        else:
+            extraargs = None
+            obj_size = self.s3_resource.ObjectSummary(bucket_name, object_name).size
+
+        log.debug("obj_size: %s, extraargs: %s", obj_size, extraargs)
         with ProgressBar(
             unit="B",
             unit_scale=True,
@@ -559,7 +578,7 @@ class S3:
             disable=self.disable_pbar,
         ) as pbar:
             self.s3_resource.Bucket(bucket_name).download_file(
-                object_name, dest_name, Callback=pbar.update_to
+                object_name, dest_name, ExtraArgs=extraargs, Callback=pbar.update_to
             )
 
 
@@ -579,13 +598,14 @@ class Download:
         self.bucket_name = bucket_name
         self.local_dir = local_dir
 
-    def download_file(self, object_name, overwrite):
+    def download_file(self, object_name, overwrite, versionid=None):
         """
         Download a file from S3.
 
         Params:
             object_name          (str): Object name to download
             overwrite     (True/False): Overwrite local file if it already exists
+            versionid            (str): Object version id
         """
         # set full file path to store the object
         dest_name = self.define_dest_name(object_name)
@@ -601,7 +621,7 @@ class Download:
         msg("cyan", "Downloading object {} to path {}".format(object_name, dest_name))
 
         try:
-            self.s3.download_object(self.bucket_name, object_name, dest_name)
+            self.s3.download_object(self.bucket_name, object_name, dest_name, versionid)
         except PermissionError:
             msg("red", "Error: Permission denied to write file {}".format(dest_name), 1)
         except botocore.exceptions.ClientError as error:
@@ -812,7 +832,7 @@ def cmd_download(s3, args):
 
     # Download a specific object
     if args.filename:
-        download.download_file(args.filename, args.overwrite)
+        download.download_file(args.filename, args.overwrite, args.versionid)
 
     # Download all objects with a prefix
     if args.prefix:
