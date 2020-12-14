@@ -27,26 +27,30 @@ Authorization is performed using environment variables:
 
 ```bash
 $ s3-client
-usage: s3-client [-h] [--debug] [--endpoint ENDPOINT] {listbuckets,listobj,metadataobj,upload,download} ...
+usage: s3-client [-h] [-d] [-e ENDPOINT] [-r REGION_NAME] {listbuckets,listobj,deleteobj,metadataobj,upload,download} ...
 
 S3 Client sample script
 
 optional arguments:
   -h, --help            show this help message and exit
-  --debug, -d           debug flag
-  --endpoint ENDPOINT, -e ENDPOINT
+  -d, --debug           debug flag
+  -e ENDPOINT, --endpoint ENDPOINT
                         S3 endpoint URL
+  -r REGION_NAME, --region REGION_NAME
+                        S3 Region Name
 
 Commands:
-  {listbuckets,listobj,metadataobj,upload,download}
+  {listbuckets,listobj,deleteobj,metadataobj,upload,download}
     listbuckets         List all buckets
     listobj             List objects in a bucket
+    deleteobj           Delete object in a bucket
     metadataobj         List object metadata
     upload              Upload files to bucket
     download            Download files from bucket
 
     Example of use:
-        s3-client -e https://s3.amazonaws.com listbuckets
+        s3-client listbuckets
+        s3-client -r us-east-1 listbuckets
         s3-client -e https://s3.amazonaws.com listobj my_bucket -t
         s3-client -e https://s3.amazonaws.com upload my_bucket -f file1
         s3-client -e https://s3.amazonaws.com upload my_bucket -d mydir
@@ -58,8 +62,8 @@ Commands:
 
 ```bash
 $ s3-client -e https://s3.amazonaws.com listbuckets
-Bucket_Name: test-script1 Creation_Date: 2019-03-22 19:40:36.379000+00:00
-Bucket_Name: test-script2 Creation_Date: 2019-03-22 19:50:35.706000+00:00
+Bucket_Name: test-script1 Creation_Date: 2019-03-22 19:40:36.379000+00:00 versioning_status: None
+Bucket_Name: test-script2 Creation_Date: 2019-03-22 19:50:35.706000+00:00 versioning_status: Enabled
 ```
 
 #### Upload file(s)
@@ -67,11 +71,12 @@ Bucket_Name: test-script2 Creation_Date: 2019-03-22 19:50:35.706000+00:00
 ```bash
 $ s3-client -e https://s3.amazonaws.com upload my_bucket -f my_file.csv
 Uploading file my_file.csv with object name my_file.csv
-  - Elapsed time 0.2451 seconds
+data transferred: 100%|█████████████████████████████████████████████████████████████| 8.39M/8.39M [00:16<00:00, 520kB/s]
+  - Elapsed time 16.1471 seconds
   - Upload completed successfully
 
 
-$ s3-client -e https://s3.amazonaws.com upload my_bucket -d mydir/
+$ s3-client -e https://s3.amazonaws.com upload my_bucket -d mydir/ --nopbar
 Uploading file mydir/test2 with object name mydir/test2
   - Elapsed time 0.1007 seconds
   - Upload completed successfully
@@ -93,18 +98,19 @@ Uploading file mydir/internal/deep/test5 with object name mydir/internal/deep/te
 
 ```bash
 $ s3-client listobj -h
-usage: s3-client listobj [-h] [--limit LIMIT] [--table] [--prefix PREFIX] bucket
+usage: s3-client listobj [-h] [-l LIMIT] [-t] [-p PREFIX] [-v] bucket
 
 positional arguments:
   bucket                Bucket Name
 
 optional arguments:
   -h, --help            show this help message and exit
-  --limit LIMIT, -l LIMIT
+  -l LIMIT, --limit LIMIT
                         Limit the number of objects returned
-  --table, -t           Show output as table
-  --prefix PREFIX, -p PREFIX
+  -t, --table           Show output as table
+  -p PREFIX, --prefix PREFIX
                         Only objects with specific prefix
+  -v, --versions        Show all object versions
 ```
 
 
@@ -131,19 +137,22 @@ $ s3-client -e https://s3.amazonaws.com listobj my_bucket -t
 
 ```bash
 $ s3-client -e https://s3.amazonaws.com download -h
-usage: s3-client download [-h] [--localdir LOCALDIR] [--overwrite] (--file FILENAME | --prefix PREFIX) bucket
+usage: s3-client download [-h] [--nopbar] [-l LOCALDIR] [-o] [-v VERSIONID] (-f FILENAME | -p PREFIX) bucket
 
 positional arguments:
   bucket                Bucket Name
 
 optional arguments:
   -h, --help            show this help message and exit
-  --localdir LOCALDIR, -l LOCALDIR
+  --nopbar              Disable progress bar
+  -l LOCALDIR, --localdir LOCALDIR
                         Local directory to save downloaded file. Default current directory
-  --overwrite, -o       Overwrite local destination file if it exists. Default false
-  --file FILENAME, -f FILENAME
+  -o, --overwrite       Overwrite local destination file if it exists. Default false
+  -v VERSIONID, --versionid VERSIONID
+                        Object version id
+  -f FILENAME, --file FILENAME
                         Download a specific file
-  --prefix PREFIX, -p PREFIX
+  -p PREFIX, --prefix PREFIX
                         Download recursively all files with a prefix.
 ```
 
@@ -153,14 +162,16 @@ Error: File ./mydir/test1 exist. Remove it from local drive to download.
 
 $ s3-client -e https://s3.amazonaws.com download my_bucket -f mydir/test1 --overwrite
 Downloading object mydir/test1 to path ./mydir/test1
-  - Elapsed time 0.0699 seconds
+data transferred: 100%|███████████████████████████████████████████████| 5.24M/5.24M [00:11<00:00, 468kB/s]
+  - Elapsed time 11.3103 seconds
   - Download completed successfully
 ```
 
 ```bash
 $ s3-client -e https://s3.amazonaws.com download my_bucket -f mydir/test1 -l /tmp/
 Downloading object mydir/test1 to path /tmp/mydir/test1
-  - Elapsed time 0.0593 seconds
+data transferred: 100%|███████████████████████████████████████████████| 5.24M/5.24M [00:11<00:00, 468kB/s]
+  - Elapsed time 11.3103 seconds
   - Download completed successfully
 
 $ ls /tmp/mydir/test1

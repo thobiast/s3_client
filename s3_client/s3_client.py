@@ -20,6 +20,8 @@ import botocore
 
 import tabulate
 
+import tqdm
+
 import urllib3
 
 
@@ -31,16 +33,12 @@ def parse_parameters():
     # epilog message: Custom text after the help
     epilog = """
     Example of use:
-        %s -e https://s3.amazonaws.com listbuckets
-        %s -e https://s3.amazonaws.com listobj my_bucket -t
-        %s -e https://s3.amazonaws.com upload my_bucket -f file1
-        %s -e https://s3.amazonaws.com upload my_bucket -d mydir
-    """ % (
-        sys.argv[0],
-        sys.argv[0],
-        sys.argv[0],
-        sys.argv[0],
-    )
+        %(prog)s listbuckets
+        %(prog)s -r us-east-1 listbuckets
+        %(prog)s -e https://s3.amazonaws.com listobj my_bucket -t
+        %(prog)s -e https://s3.amazonaws.com upload my_bucket -f file1
+        %(prog)s -e https://s3.amazonaws.com upload my_bucket -d mydir
+    """
     # Create the argparse object and define global options
     parser = argparse.ArgumentParser(
         description="S3 Client sample script",
@@ -48,10 +46,13 @@ def parse_parameters():
         epilog=epilog,
     )
     parser.add_argument(
-        "--debug", "-d", action="store_true", dest="debug", help="debug flag"
+        "-d", "--debug", action="store_true", dest="debug", help="debug flag"
     )
     parser.add_argument(
-        "--endpoint", "-e", default=None, dest="endpoint", help="S3 endpoint URL"
+        "-e", "--endpoint", default=None, dest="endpoint", help="S3 endpoint URL"
+    )
+    parser.add_argument(
+        "-r", "--region", default=None, dest="region_name", help="S3 Region Name"
     )
     # Add subcommands options
     subparsers = parser.add_subparsers(title="Commands", dest="command")
@@ -66,21 +67,40 @@ def parse_parameters():
     # List objects
     list_parser = subparsers.add_parser("listobj", help="List objects in a bucket")
     list_parser.add_argument(
-        "--limit",
         "-l",
+        "--limit",
         type=int,
         required=False,
         default=None,
         help="Limit the number of objects returned",
     )
     list_parser.add_argument(
-        "--table", "-t", action="store_true", help="Show output as table"
+        "-t", "--table", action="store_true", help="Show output as table"
     )
     list_parser.add_argument(
-        "--prefix", "-p", required=False, help="Only objects with specific prefix"
+        "-p", "--prefix", required=False, help="Only objects with specific prefix"
+    )
+    list_parser.add_argument(
+        "-v", "--versions", action="store_true", help="Show all object versions"
     )
     list_parser.add_argument("bucket", help="Bucket Name")
     list_parser.set_defaults(func=cmd_list_obj)
+
+    # Delete object
+    deleteobj_parser = subparsers.add_parser(
+        "deleteobj", help="Delete object in a bucket"
+    )
+    deleteobj_parser.add_argument("bucket", help="Bucket Name")
+    deleteobj_parser.add_argument("object", help="Object Key Name")
+    deleteobj_parser.add_argument(
+        "-v",
+        "--versionid",
+        dest="versionid",
+        help="""
+        Object version id (in a versioning bucket this really delete the object version)
+        """,
+    )
+    deleteobj_parser.set_defaults(func=cmd_delete_obj)
 
     # Metadata objects
     metadata_parser = subparsers.add_parser("metadataobj", help="List object metadata")
@@ -92,15 +112,20 @@ def parse_parameters():
     upload_parser = subparsers.add_parser("upload", help="Upload files to bucket")
     upload_parser.add_argument("bucket", help="Bucket Name")
     upload_parser.add_argument(
+        "--nopbar",
+        action="store_true",
+        help="Disable progress bar",
+    )
+    upload_parser.add_argument(
         "--nokeepdir",
         default=False,
         action="store_true",
         help="Do not keep local directory structure on uploaded objects names",
     )
     upload_group = upload_parser.add_mutually_exclusive_group(required=True)
-    upload_group.add_argument("--file", "-f", dest="filename", help="File to upload")
+    upload_group.add_argument("-f", "--file", dest="filename", help="File to upload")
     upload_group.add_argument(
-        "--dir", "-d", dest="dir", help="Directory to upload all files recursively"
+        "-d", "--dir", dest="dir", help="Directory to upload all files recursively"
     )
     upload_parser.set_defaults(func=cmd_upload)
 
@@ -110,25 +135,35 @@ def parse_parameters():
     )
     download_parser.add_argument("bucket", help="Bucket Name")
     download_parser.add_argument(
-        "--localdir",
+        "--nopbar",
+        action="store_true",
+        help="Disable progress bar",
+    )
+    download_parser.add_argument(
         "-l",
+        "--localdir",
         default=".",
         dest="localdir",
         help="Local directory to save downloaded file. Default current directory",
     )
     download_parser.add_argument(
-        "--overwrite",
         "-o",
+        "--overwrite",
         action="store_true",
         help="Overwrite local destination file if it exists. Default false",
     )
+    download_parser.add_argument(
+        "-v",
+        "--versionid",
+        help="Object version id",
+    )
     download_group = download_parser.add_mutually_exclusive_group(required=True)
     download_group.add_argument(
-        "--file", "-f", dest="filename", help="Download a specific file"
+        "-f", "--file", dest="filename", help="Download a specific file"
     )
     download_group.add_argument(
-        "--prefix",
         "-p",
+        "--prefix",
         dest="prefix",
         help="Download recursively all files with a prefix.",
     )
@@ -305,10 +340,23 @@ class Config:
         return os.environ.get(var)
 
 
+class ProgressBar(tqdm.tqdm):
+    """Class to display progress bar."""
+
+    def update_to(self, bytes_sent):
+        """
+        Update tqdm status bar.
+
+        Params:
+            bytes_sent    (int): number of bytes transferred
+        """
+        return self.update(bytes_sent)
+
+
 class S3:
     """Class to handle S3 operations."""
 
-    def __init__(self, key, secret, s3_endpoint):
+    def __init__(self, key, secret, s3_endpoint, region_name):
         """
         Initialize s3 class.
 
@@ -316,14 +364,17 @@ class S3:
             key           (str): AWS_ACCESS_KEY_ID
             secret        (str): AWS_SECRET_ACCESS_KEY
             s3_endpoint   (str): S3 endpoint URL
+            region_name   (str): Region Name
         """
         self.s3_resource = boto3.resource(
             "s3",
             endpoint_url=s3_endpoint,
             verify=False,
+            region_name=region_name,
             aws_access_key_id=key,
             aws_secret_access_key=secret,
         )
+        self.disable_pbar = False
         self.buckets_exist = []
 
     def check_bucket_exist(self, bucket_name):
@@ -353,6 +404,18 @@ class S3:
             else:
                 raise
 
+    def check_bucket_versioning(self, bucket_name):
+        """
+        Return bucket versioning status.
+
+        Params:
+            bucket_name           (str): Bucket name
+
+        Return:
+            (str)
+        """
+        return self.s3_resource.BucketVersioning(bucket_name).status
+
     def list_buckets(self):
         """
         List all buckets.
@@ -381,11 +444,42 @@ class S3:
         if prefix:
             return (
                 self.s3_resource.Bucket(bucket_name)
-                .objects.filter(Prefix=prefix,)
+                .objects.filter(
+                    Prefix=prefix,
+                )
                 .limit(limit)
             )
         else:
             return self.s3_resource.Bucket(bucket_name).objects.all().limit(limit)
+
+    def list_objects_versions(self, bucket_name, *, prefix=None, limit=None):
+        """
+        List all objects versions stored in a bucket.
+
+        Params:
+            bucket_name      (str): Bucket name
+
+        Keyword arguments (opt):
+            prefix           (str): Filter only objects with specific prefix
+                                    default None
+            limit            (int): Limit the number of objects returned
+                                    default None
+
+        Returns:
+            An iterable of ObjectVersion resources
+        """
+        if prefix:
+            return (
+                self.s3_resource.Bucket(bucket_name)
+                .object_versions.filter(
+                    Prefix=prefix,
+                )
+                .limit(limit)
+            )
+        else:
+            return (
+                self.s3_resource.Bucket(bucket_name).object_versions.all().limit(limit)
+            )
 
     def metadata_object(self, bucket_name, object_name):
         """
@@ -397,6 +491,23 @@ class S3:
         """
         return self.s3_resource.meta.client.head_object(
             Bucket=bucket_name, Key=object_name
+        )
+
+    def delete_object(self, bucket_name, object_name, version_id=None):
+        """
+        Delete an object.
+
+        Params:
+            bucket_name           (str): Bucket name
+            object_name           (str): Object key name
+            version_id            (str): Object version id
+        """
+        obj = {"Key": object_name}
+        if version_id:
+            obj["VersionId"] = version_id
+
+        return self.s3_resource.Bucket(bucket_name).delete_objects(
+            Delete={"Objects": [obj]}
         )
 
     @time_elapsed
@@ -416,12 +527,23 @@ class S3:
 
         log.debug("Uploading file: %s with key: %s", file_name, key_name)
 
-        self.s3_resource.Bucket(bucket_name).upload_file(
-            Filename=file_name, Key=key_name,
-        )
+        obj_size = os.path.getsize(file_name)
+        with ProgressBar(
+            unit="B",
+            unit_scale=True,
+            desc="data transferred",
+            total=obj_size,
+            miniters=1,
+            disable=self.disable_pbar,
+        ) as pbar:
+            self.s3_resource.Bucket(bucket_name).upload_file(
+                Filename=file_name,
+                Key=key_name,
+                Callback=pbar.update_to,
+            )
 
     @time_elapsed
-    def download_object(self, bucket_name, object_name, dest_name):
+    def download_object(self, bucket_name, object_name, dest_name, versionid=None):
         """
         Download an object from S3 to local source.
 
@@ -429,10 +551,35 @@ class S3:
             bucket_name            (str): Bucket name
             object_name            (str): Object name
             dest_name              (str): Full path filename to store the object
+            versionid             (str): Object version id
         """
         log.debug("Downloading object %s to dest %s", object_name, dest_name)
 
-        self.s3_resource.Bucket(bucket_name).download_file(object_name, dest_name)
+        if versionid:
+            extraargs = {"VersionId": versionid}
+            resp = self.s3_resource.ObjectVersion(
+                bucket_name, object_name, versionid
+            ).head()
+            obj_size = resp["ContentLength"]
+            # Change to 'size' attribute when this boto3 bug got fixed:
+            # https://github.com/boto/boto3/issues/832
+            # self.s3_resource.ObjectVersion(bucket_name, object_name, versionid).size
+        else:
+            extraargs = None
+            obj_size = self.s3_resource.ObjectSummary(bucket_name, object_name).size
+
+        log.debug("obj_size: %s, extraargs: %s", obj_size, extraargs)
+        with ProgressBar(
+            unit="B",
+            unit_scale=True,
+            desc="data transferred",
+            total=obj_size,
+            miniters=1,
+            disable=self.disable_pbar,
+        ) as pbar:
+            self.s3_resource.Bucket(bucket_name).download_file(
+                object_name, dest_name, ExtraArgs=extraargs, Callback=pbar.update_to
+            )
 
 
 class Download:
@@ -451,13 +598,14 @@ class Download:
         self.bucket_name = bucket_name
         self.local_dir = local_dir
 
-    def download_file(self, object_name, overwrite):
+    def download_file(self, object_name, overwrite, versionid=None):
         """
         Download a file from S3.
 
         Params:
             object_name          (str): Object name to download
             overwrite     (True/False): Overwrite local file if it already exists
+            versionid            (str): Object version id
         """
         # set full file path to store the object
         dest_name = self.define_dest_name(object_name)
@@ -473,7 +621,7 @@ class Download:
         msg("cyan", "Downloading object {} to path {}".format(object_name, dest_name))
 
         try:
-            self.s3.download_object(self.bucket_name, object_name, dest_name)
+            self.s3.download_object(self.bucket_name, object_name, dest_name, versionid)
         except PermissionError:
             msg("red", "Error: Permission denied to write file {}".format(dest_name), 1)
         except botocore.exceptions.ClientError as error:
@@ -544,6 +692,19 @@ def cmd_metadata_obj(s3, args):
 
 
 ##############################################################################
+# Delete object
+##############################################################################
+def cmd_delete_obj(s3, args):
+    """Handle delete object option."""
+    # Check if bucket exist
+    if not s3.check_bucket_exist(args.bucket):
+        msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
+
+    resp = s3.delete_object(args.bucket, args.object, args.versionid)
+    pprint.pprint(resp["Deleted"])
+
+
+##############################################################################
 # Command to list all buckets
 ##############################################################################
 def cmd_list_buckets(s3, args):
@@ -553,7 +714,9 @@ def cmd_list_buckets(s3, args):
         for attr in attrs:
             msg("cyan", attr, end=": ")
             msg("nocolor", getattr(bucket, attr), end=" ")
-        msg("nocolor", "")
+        versioning = s3.check_bucket_versioning(bucket.name)
+        msg("cyan", "versioning_status", end=": ")
+        msg("nocolor", versioning)
         if args.acl:
             msg("cyan", "  acl: ")
             msg("nocolor", "   {}".format(pprint.pformat(bucket.Acl().grants)))
@@ -568,10 +731,24 @@ def cmd_list_obj(s3, args):
     if not s3.check_bucket_exist(args.bucket):
         msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
 
-    objects = s3.list_objects(args.bucket, prefix=args.prefix, limit=args.limit)
-
-    # Resource's attributes:
-    attrs = ["key", "size", "storage_class", "e_tag", "last_modified"]
+    if args.versions:
+        objects = s3.list_objects_versions(
+            args.bucket, prefix=args.prefix, limit=args.limit
+        )
+        # Resource's attributes:
+        attrs = [
+            "key",
+            "size",
+            "storage_class",
+            "e_tag",
+            "last_modified",
+            "version_id",
+            "is_latest",
+        ]
+    else:
+        objects = s3.list_objects(args.bucket, prefix=args.prefix, limit=args.limit)
+        # Resource's attributes:
+        attrs = ["key", "size", "storage_class", "e_tag", "last_modified"]
 
     if args.table:
         # Tabulate needs to keep the entire table in-memory
@@ -621,6 +798,8 @@ def cmd_upload(s3, args):
     if not s3.check_bucket_exist(args.bucket):
         msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
 
+    s3.disable_pbar = args.nopbar
+
     if args.filename:
         upload_single_file(s3, args.bucket, args.filename, args.nokeepdir)
 
@@ -643,6 +822,8 @@ def cmd_download(s3, args):
     if not s3.check_bucket_exist(args.bucket):
         msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
 
+    s3.disable_pbar = args.nopbar
+
     # Check if local directory exists
     if not os.path.exists(args.localdir):
         msg("red", "Error: directory {} does not exist".format(args.localdir), 1)
@@ -651,7 +832,7 @@ def cmd_download(s3, args):
 
     # Download a specific object
     if args.filename:
-        download.download_file(args.filename, args.overwrite)
+        download.download_file(args.filename, args.overwrite, args.versionid)
 
     # Download all objects with a prefix
     if args.prefix:
@@ -685,7 +866,12 @@ def main():
     except ValueError as error:
         msg("red", str(error), 1)
 
-    s3 = S3(config.aws_access_key_id, config.aws_secret_access_key, args.endpoint,)
+    s3 = S3(
+        config.aws_access_key_id,
+        config.aws_secret_access_key,
+        args.endpoint,
+        args.region_name,
+    )
 
     # Execute the function (command)
     if args.command is not None:

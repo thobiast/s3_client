@@ -21,7 +21,7 @@ def test_download_file(download, tmp_filename):
     download.define_dest_name.return_value = dest_name
     download.download_file(obj_name, True)
     download.s3.download_object.assert_called_once_with(
-        download.bucket_name, obj_name, dest_name
+        download.bucket_name, obj_name, dest_name, None
     )
 
 
