@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import boto3
-import pytest
 import moto
+import pytest
 
 from s3_client import s3_client
 
@@ -24,7 +24,7 @@ def s3():
 
 @pytest.fixture(scope="function")
 def s3_bucket():
-    with moto.mock_s3():
+    with moto.mock_aws():
         conn = boto3.resource("s3", region_name=REGION_NAME)
         conn.create_bucket(Bucket=BUCKET_NAME)
         yield conn
@@ -32,7 +32,7 @@ def s3_bucket():
 
 @pytest.fixture(scope="function")
 def s3_objects():
-    with moto.mock_s3():
+    with moto.mock_aws():
         conn = boto3.resource("s3", region_name=REGION_NAME)
         conn.create_bucket(Bucket=BUCKET_NAME)
         for key_name in KEY_NAMES:
