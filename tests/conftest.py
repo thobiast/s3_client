@@ -17,9 +17,11 @@ REGION_NAME = "us-east-1"
 
 @pytest.fixture(scope="function")
 def s3():
-    return s3_client.S3(
-        "aws_key_id", "aws_access_key", "https://s3.amazonaws.com", REGION_NAME
-    )
+    with moto.mock_aws():
+        config = s3_client.Config()
+        session = config.get_session()
+        s3 = s3_client.S3(session)
+        yield s3
 
 
 @pytest.fixture(scope="function")

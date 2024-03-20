@@ -30,6 +30,7 @@ def parse_parameters():
     epilog = """
     Example of use:
         %(prog)s listbuckets
+        %(prog)s --profile dev listbuckets
         %(prog)s -r us-east-1 listbuckets
         %(prog)s -e https://s3.amazonaws.com listobj my_bucket -t
         %(prog)s -e https://s3.amazonaws.com upload my_bucket -f file1
@@ -49,6 +50,9 @@ def parse_parameters():
     )
     parser.add_argument(
         "-r", "--region", default=None, dest="region_name", help="S3 Region Name"
+    )
+    parser.add_argument(
+        "--profile", default=None, dest="aws_profile", help="AWS profile to use"
     )
     # Add subcommands options
     subparsers = parser.add_subparsers(title="Commands", dest="command")
@@ -321,19 +325,41 @@ def time_elapsed(func):
 class Config:
     """Class to handle configurations."""
 
-    def __init__(self):
-        """Initialize configurations."""
-        self.aws_access_key_id = self.get_env("AWS_ACCESS_KEY_ID")
-        self.aws_secret_access_key = self.get_env("AWS_SECRET_ACCESS_KEY")
+    def __init__(self, profile_name=None):
+        """
+        Initialize configurations using AWS profile or environment variables.
+        If a profile name is provided, it will use that profile.
+        Otherwise, it checks for environment variables and raises an error if they are not set.
 
-    @staticmethod
-    def get_env(var):
-        """Read environment variable."""
-        if not os.environ.get(var):
-            raise ValueError(
-                "Error: You must export environment variable {}".format(var)
+        Params:
+            profile_name (str, optional): The name of the AWS profile to use.
+        """
+        if profile_name:
+            self.session = boto3.Session(profile_name=profile_name)
+        else:
+            self.aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+            self.aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+            self.aws_session_token = os.getenv("AWS_SESSION_TOKEN")  # Optional
+
+            if not self.aws_access_key or not self.aws_secret_key:
+                raise ValueError(
+                    "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set in environment variables."
+                )
+
+            self.session = boto3.Session(
+                aws_access_key_id=self.aws_access_key,
+                aws_secret_access_key=self.aws_secret_key,
+                aws_session_token=self.aws_session_token,
             )
-        return os.environ.get(var)
+
+    def get_session(self):
+        """
+        Returns the boto3 session.
+
+        Returns:
+            boto3.Session: The initialized boto3 session.
+        """
+        return self.session
 
 
 class ProgressBar(tqdm.tqdm):
@@ -352,23 +378,17 @@ class ProgressBar(tqdm.tqdm):
 class S3:
     """Class to handle S3 operations."""
 
-    def __init__(self, key, secret, s3_endpoint, region_name):
+    def __init__(self, session, s3_endpoint=None, region_name=None):
         """
-        Initialize s3 class.
+        Initialize s3 class using the provided boto3 session.
 
         Params:
-            key           (str): AWS_ACCESS_KEY_ID
-            secret        (str): AWS_SECRET_ACCESS_KEY
-            s3_endpoint   (str): S3 endpoint URL
-            region_name   (str): Region Name
+            session       (boto3.Session): A boto3 session object
+            s3_endpoint   (str): S3 endpoint URL, if using a custom endpoint
+            region_name   (str): AWS region name
         """
-        self.s3_resource = boto3.resource(
-            "s3",
-            endpoint_url=s3_endpoint,
-            verify=False,
-            region_name=region_name,
-            aws_access_key_id=key,
-            aws_secret_access_key=secret,
+        self.s3_resource = session.resource(
+            "s3", endpoint_url=s3_endpoint, region_name=region_name
         )
         self.disable_pbar = False
         self.buckets_exist = []
@@ -858,16 +878,11 @@ def main():
     log.debug("CMD line args: %s", vars(args))
 
     try:
-        config = Config()
+        config = Config(profile_name=args.aws_profile)
     except ValueError as error:
         msg("red", str(error), 1)
 
-    s3 = S3(
-        config.aws_access_key_id,
-        config.aws_secret_access_key,
-        args.endpoint,
-        args.region_name,
-    )
+    s3 = S3(config.get_session(), args.endpoint, args.region_name)
 
     # Execute the function (command)
     if args.command is not None:
