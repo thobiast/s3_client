@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Test Download class."""
 
-import pytest
 from unittest.mock import Mock
 
 from s3_client import s3_client

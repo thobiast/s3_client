@@ -15,13 +15,9 @@ import sys
 import time
 
 import boto3
-
 import botocore
-
 import tabulate
-
 import tqdm
-
 import urllib3
 
 

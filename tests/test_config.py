@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """Test config class."""
+# flake8: noqa: F841
 
-from unittest.mock import patch
 import pytest
+
 from s3_client import s3_client
 
 

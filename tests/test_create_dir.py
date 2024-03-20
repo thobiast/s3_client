@@ -2,7 +2,7 @@
 """Test create_dir function."""
 
 from unittest.mock import patch
-import pytest
+
 from s3_client import s3_client
 
 dir_name = "mydirtest"
