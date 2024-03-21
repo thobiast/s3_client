@@ -19,9 +19,8 @@ REGION_NAME = "us-east-1"
 def s3():
     with moto.mock_aws():
         config = s3_client.Config()
-        session = config.get_session()
-        s3 = s3_client.S3(session)
-        yield s3
+        s3_instance = s3_client.S3(config)
+        yield s3_instance
 
 
 @pytest.fixture(scope="function")

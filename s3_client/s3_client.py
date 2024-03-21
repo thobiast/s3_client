@@ -330,9 +330,14 @@ class Config:
     or environment variables. If an AWS profile is specified, it attempts to use
     that profile to create a boto3 session. If no profile is specified, it falls back
     to using credentials specified in environment variables.
+
+    Attributes:
+        session (boto3.Session): A boto3 Session object initialized.
+        region_name (str): The AWS region name.
+        s3_endpoint (str): The custom S3 endpoint URL.
     """
 
-    def __init__(self, profile_name=None):
+    def __init__(self, profile_name=None, region_name=None, s3_endpoint=None):
         """
         Initialize configurations using AWS profile or environment variables.
         If a profile name is provided, it will use that profile.
@@ -340,9 +345,16 @@ class Config:
 
         Params:
             profile_name (str, optional): The name of the AWS profile to use.
+            region_name (str, optional): The AWS region name to use.
+            s3_endpoint (str, optional): The custom S3 endpoint URL.
         """
+        self.region_name = region_name
+        self.s3_endpoint = s3_endpoint
+
         if profile_name:
-            self.session = boto3.Session(profile_name=profile_name)
+            self.session = boto3.Session(
+                profile_name=profile_name, region_name=region_name
+            )
             try:
                 if not self.session.get_credentials():
                     raise ValueError(
@@ -363,6 +375,7 @@ class Config:
                 )
 
             self.session = boto3.Session(
+                region_name=region_name,
                 aws_access_key_id=self.aws_access_key,
                 aws_secret_access_key=self.aws_secret_key,
                 aws_session_token=self.aws_session_token,
@@ -392,19 +405,26 @@ class ProgressBar(tqdm.tqdm):
 
 
 class S3:
-    """Class to handle S3 operations."""
+    """
+    Class to handle S3 operations.
 
-    def __init__(self, session, s3_endpoint=None, region_name=None):
+    Attributes:
+        s3_resource (boto3.resource): The boto3 S3 resource object used to interact with S3.
+        disable_pbar (bool): Flag to disable the progress bar display.
+        buckets_exist (list): A list to cache bucket existence checks.
+    """
+
+    def __init__(self, config):
         """
-        Initialize s3 class using the provided boto3 session.
+        Initializes the S3 manager with configurations provided by the Config object.
 
         Params:
-            session       (boto3.Session): A boto3 session object
-            s3_endpoint   (str): S3 endpoint URL, if using a custom endpoint
-            region_name   (str): AWS region name
+            config (Config): The configuration object providing the session,
+                             region, and S3 endpoint information.
         """
-        self.s3_resource = session.resource(
-            "s3", endpoint_url=s3_endpoint, region_name=region_name
+        boto3_session = config.get_session()
+        self.s3_resource = boto3_session.resource(
+            "s3", endpoint_url=config.s3_endpoint, region_name=config.region_name
         )
         self.disable_pbar = False
         self.buckets_exist = []
@@ -894,11 +914,15 @@ def main():
     log.debug("CMD line args: %s", vars(args))
 
     try:
-        config = Config(profile_name=args.aws_profile)
+        config = Config(
+            profile_name=args.aws_profile,
+            region_name=args.region_name,
+            s3_endpoint=args.endpoint,
+        )
     except ValueError as error:
         msg("red", str(error), 1)
 
-    s3 = S3(config.get_session(), args.endpoint, args.region_name)
+    s3 = S3(config)
 
     # Execute the function (command)
     if args.command is not None:
