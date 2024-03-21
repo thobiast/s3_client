@@ -122,6 +122,13 @@ def parse_parameters():
         action="store_true",
         help="Do not keep local directory structure on uploaded objects names",
     )
+    upload_parser.add_argument(
+        "-p",
+        "--prefix",
+        dest="prefix",
+        default="",
+        help="Prefix to add to the object name on upload",
+    )
     upload_group = upload_parser.add_mutually_exclusive_group(required=True)
     upload_group.add_argument("-f", "--file", dest="filename", help="File to upload")
     upload_group.add_argument(
@@ -431,14 +438,13 @@ class S3:
 
     def check_bucket_exist(self, bucket_name):
         """
-        Verify if a bucket exists.
+        Checks if the specified bucket exists and caches the result.
 
         Params:
             bucket_name           (str): Bucket name
 
         Return:
-            True  : bucket exists
-            False : bucket does not exist
+            bool: True if the bucket exists, False otherwise.
         """
         # If bucket was already checked, return it exists
         if bucket_name in self.buckets_exist:
@@ -822,47 +828,89 @@ def cmd_list_obj(s3, args):
 ##############################################################################
 # Upload a file to S3
 ##############################################################################
-def upload_single_file(s3, bucket_name, file_name, nokeepdir):
-    """Upload single file to S3."""
-    # Configure the object name
-    # if nokeepdir, remove the path from key_name, otherwise
-    # the key_name is the same as file_name
-    key_name = file_name.split("/")[-1] if nokeepdir else file_name
+def upload_file_to_s3(s3, bucket_name, file_path, object_name):
+    """
+    Upload a single file to an S3 bucket.
 
-    msg("cyan", "Uploading file {} with object name {}".format(file_name, key_name))
+    Parameters:
+        s3 (S3): An instance of the S3 class.
+        bucket_name (str): The name of the S3 bucket where the file will be uploaded.
+        file_path (str): The path of the file on the local file system to upload.
+        object_name (str): The target object name in the S3 bucket. This is the name
+                           that will be used to store the file in the bucket.
+    """
+
+    msg("cyan", f"Uploading file {file_path} with object name {object_name}")
 
     try:
-        s3.upload_file(bucket_name, file_name, key_name)
+        s3.upload_file(bucket_name, file_path, object_name)
     except PermissionError:
-        msg("red", "Error: permission denied to read file {}".format(file_name), 1)
+        msg("red", f"Error: permission denied to read file {file_path}", 1)
     except FileNotFoundError:
-        msg("red", "Error: File '{}' not found".format(file_name), 1)
+        msg("red", f"Error: File '{file_path}' not found", 1)
 
     msg("green", "  - Upload completed successfully")
+
+
+def upload_construct_object_name(file_path, prefix, nokeepdir):
+    """
+    Construct the object name for S3 upload, considering prefix and directory structure.
+
+    Args:
+        file_path (str): The path to the file being uploaded.
+        prefix (str): The prefix string to prepend to the object name.
+        nokeepdir (bool): Flag to keep or discard the directory structure in the object name.
+    """
+    # Extract the base filename if nokeepdir is set; otherwise, use the full file_path
+    base_name = os.path.basename(file_path) if nokeepdir else file_path
+
+    # Add the prefix to the object_name
+    return f"{prefix}{base_name}"
 
 
 ##############################################################################
 # Command to upload file or directory
 ##############################################################################
 def cmd_upload(s3, args):
-    """Handle upload option."""
+    """
+    Command to upload files or directories to an S3 bucket.
+
+    This function handles the 'upload' command line argument. It uploads
+    either a single file or all files within a directory to the specified S3 bucket.
+
+    Args:
+        s3 (S3): An instance of the S3 class.
+        args (argparse.Namespace): Command line arguments.
+    """
     # Check if bucket exist
     if not s3.check_bucket_exist(args.bucket):
-        msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
+        msg("red", f"Error: Bucket '{args.bucket}' does not exist", 1)
 
     s3.disable_pbar = args.nopbar
 
     if args.filename:
-        upload_single_file(s3, args.bucket, args.filename, args.nokeepdir)
+        if os.path.isfile(args.filename):
+            object_name = upload_construct_object_name(
+                args.filename, args.prefix, args.nokeepdir
+            )
+            upload_file_to_s3(s3, args.bucket, args.filename, object_name)
+        else:
+            msg(
+                "red",
+                f"Error: The specified file '{args.filename}' does not exist or is a directory",
+                1,
+            )
 
     if args.dir:
         if not os.path.isdir(args.dir):
-            msg("red", "Error: Directory '{}' not found".format(args.dir), 1)
-
+            msg("red", f"Error: Directory '{args.dir}' not found", 1)
         for dirpath, _dirnames, files in os.walk(args.dir):
             for filename in files:
                 file_path = os.path.join(dirpath, filename)
-                upload_single_file(s3, args.bucket, file_path, args.nokeepdir)
+                object_name = upload_construct_object_name(
+                    file_path, args.prefix, args.nokeepdir
+                )
+                upload_file_to_s3(s3, args.bucket, file_path, object_name)
 
 
 ##############################################################################

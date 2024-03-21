@@ -52,3 +52,18 @@ def tmp_filename(tmpdir):
     p = tmpdir.join(TMP_FILENAME)
     p.write(TMP_FILENAME)
     return str(p)
+
+
+@pytest.fixture(scope="function")
+def directory_with_two_files(tmp_path):
+    # Create a new directory
+    dir_path = tmp_path / "subdir"
+    dir_path.mkdir()
+
+    file1 = dir_path / "file1.txt"
+    file2 = dir_path / "file2.txt"
+
+    file1.write_text("file1.txt")
+    file2.write_text("file2.txt")
+
+    return dir_path, file1, file2
