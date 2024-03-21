@@ -323,7 +323,14 @@ def time_elapsed(func):
 
 
 class Config:
-    """Class to handle configurations."""
+    """
+    Handles configuration for AWS services by initializing a boto3 session.
+
+    This class supports initializing configurations using either an AWS profile
+    or environment variables. If an AWS profile is specified, it attempts to use
+    that profile to create a boto3 session. If no profile is specified, it falls back
+    to using credentials specified in environment variables.
+    """
 
     def __init__(self, profile_name=None):
         """
@@ -336,6 +343,15 @@ class Config:
         """
         if profile_name:
             self.session = boto3.Session(profile_name=profile_name)
+            try:
+                if not self.session.get_credentials():
+                    raise ValueError(
+                        f"Could not find credentials for AWS profile '{profile_name}'"
+                    )
+            except botocore.exceptions.PartialCredentialsError as e:
+                raise ValueError(
+                    f"Partial credentials found for AWS profile '{profile_name}'. {e}"
+                )
         else:
             self.aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
             self.aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
