@@ -1,10 +1,13 @@
-# s3-client - Example python script to work with S3
+# s3-client - A Sample Python Script for Managing S3
 
-![build](https://github.com/thobiast/s3_client/workflows/build/badge.svg)
+![build](https://github.com/thobiast/s3_client/actions/workflows/build.yml/badge.svg)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/s3-client)
 [![codecov](https://codecov.io/gh/thobiast/s3_client/branch/master/graph/badge.svg)](https://codecov.io/gh/thobiast/s3_client)
 [![GitHub License](https://img.shields.io/github/license/thobiast/s3_client)](https://github.com/thobiast/s3_client/blob/master/LICENSE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
+
+This Python script provides a simple command-line interface (CLI) to interact with AWS S3 services, allowing you to perform operations like listing buckets, uploading/downloading files, and more.
 
 
 ## Installation
@@ -13,31 +16,48 @@
 pip install s3-client
 ```
 
+Or, clone the repository and install from source:
 
-### Authorization
+#### Install in development mode using pip
+```bash
+$ pip install -e .
+```
 
-Authorization is performed using environment variables:
+#### Install in development mode using pipx
+```bash
+$ pipx install -e .
+```
 
-- **AWS_ACCESS_KEY_ID** -  Specifies an AWS access key
+## Configuration
 
-- **AWS_SECRET_ACCESS_KEY** - Specifies the secret key associated with the access key. This is essentially the "password" for the access key.
+This script uses environment variables or AWS profile for authorization.
 
+To use environment variables, provide your credentials as follows:
+
+- **AWS_ACCESS_KEY_ID**: Specifies an AWS access key associated with an IAM user or role.
+- **AWS_SECRET_ACCESS_KEY**: Specifies the secret key associated with the access key. This is essentially the "password" for the access key.
+
+Alternatively, use the '**--profile**' option to specify the AWS profile configured in your AWS
+credentials file (usually located at '**~/.aws/credentials**'). This is useful if you have multiple
+AWS accounts or configurations.
 
 ## Usage:
 
 ```bash
 $ s3-client
-usage: s3-client [-h] [-d] [-e ENDPOINT] [-r REGION_NAME] {listbuckets,listobj,deleteobj,metadataobj,upload,download} ...
+usage: s3-client [-h] [-d] [-e ENDPOINT] [-r REGION_NAME] [--profile AWS_PROFILE] {listbuckets,listobj,deleteobj,metadataobj,upload,download} ...
 
 S3 Client sample script
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   -d, --debug           debug flag
   -e ENDPOINT, --endpoint ENDPOINT
                         S3 endpoint URL
   -r REGION_NAME, --region REGION_NAME
                         S3 Region Name
+  --profile AWS_PROFILE
+                        AWS profile to use
 
 Commands:
   {listbuckets,listobj,deleteobj,metadataobj,upload,download}
@@ -50,6 +70,7 @@ Commands:
 
     Example of use:
         s3-client listbuckets
+        s3-client --profile dev listbuckets
         s3-client -r us-east-1 listbuckets
         s3-client -e https://s3.amazonaws.com listobj my_bucket -t
         s3-client -e https://s3.amazonaws.com upload my_bucket -f file1

@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """Test s3 class."""
 
-import pytest
 from unittest.mock import Mock
 
-from s3_client import s3_client
+import pytest
+from conftest import BUCKET_NAME, KEY_NAMES
 
-from conftest import KEY_NAMES, BUCKET_NAME
+from s3_client import s3_client
 
 
 @pytest.mark.parametrize("prefix", [("t"), ("test")])

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import boto3
-import pytest
 import moto
+import pytest
 
 from s3_client import s3_client
 
@@ -17,14 +17,15 @@ REGION_NAME = "us-east-1"
 
 @pytest.fixture(scope="function")
 def s3():
-    return s3_client.S3(
-        "aws_key_id", "aws_access_key", "https://s3.amazonaws.com", REGION_NAME
-    )
+    with moto.mock_aws():
+        config = s3_client.Config()
+        s3_instance = s3_client.S3(config)
+        yield s3_instance
 
 
 @pytest.fixture(scope="function")
 def s3_bucket():
-    with moto.mock_s3():
+    with moto.mock_aws():
         conn = boto3.resource("s3", region_name=REGION_NAME)
         conn.create_bucket(Bucket=BUCKET_NAME)
         yield conn
@@ -32,7 +33,7 @@ def s3_bucket():
 
 @pytest.fixture(scope="function")
 def s3_objects():
-    with moto.mock_s3():
+    with moto.mock_aws():
         conn = boto3.resource("s3", region_name=REGION_NAME)
         conn.create_bucket(Bucket=BUCKET_NAME)
         for key_name in KEY_NAMES:
@@ -51,3 +52,18 @@ def tmp_filename(tmpdir):
     p = tmpdir.join(TMP_FILENAME)
     p.write(TMP_FILENAME)
     return str(p)
+
+
+@pytest.fixture(scope="function")
+def directory_with_two_files(tmp_path):
+    # Create a new directory
+    dir_path = tmp_path / "subdir"
+    dir_path.mkdir()
+
+    file1 = dir_path / "file1.txt"
+    file2 = dir_path / "file2.txt"
+
+    file1.write_text("file1.txt")
+    file2.write_text("file2.txt")
+
+    return dir_path, file1, file2

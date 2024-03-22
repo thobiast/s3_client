@@ -15,13 +15,9 @@ import sys
 import time
 
 import boto3
-
 import botocore
-
 import tabulate
-
 import tqdm
-
 import urllib3
 
 
@@ -34,6 +30,7 @@ def parse_parameters():
     epilog = """
     Example of use:
         %(prog)s listbuckets
+        %(prog)s --profile dev listbuckets
         %(prog)s -r us-east-1 listbuckets
         %(prog)s -e https://s3.amazonaws.com listobj my_bucket -t
         %(prog)s -e https://s3.amazonaws.com upload my_bucket -f file1
@@ -53,6 +50,9 @@ def parse_parameters():
     )
     parser.add_argument(
         "-r", "--region", default=None, dest="region_name", help="S3 Region Name"
+    )
+    parser.add_argument(
+        "--profile", default=None, dest="aws_profile", help="AWS profile to use"
     )
     # Add subcommands options
     subparsers = parser.add_subparsers(title="Commands", dest="command")
@@ -121,6 +121,13 @@ def parse_parameters():
         default=False,
         action="store_true",
         help="Do not keep local directory structure on uploaded objects names",
+    )
+    upload_parser.add_argument(
+        "-p",
+        "--prefix",
+        dest="prefix",
+        default="",
+        help="Prefix to add to the object name on upload",
     )
     upload_group = upload_parser.add_mutually_exclusive_group(required=True)
     upload_group.add_argument("-f", "--file", dest="filename", help="File to upload")
@@ -323,21 +330,72 @@ def time_elapsed(func):
 
 
 class Config:
-    """Class to handle configurations."""
+    """
+    Handles configuration for AWS services by initializing a boto3 session.
 
-    def __init__(self):
-        """Initialize configurations."""
-        self.aws_access_key_id = self.get_env("AWS_ACCESS_KEY_ID")
-        self.aws_secret_access_key = self.get_env("AWS_SECRET_ACCESS_KEY")
+    This class supports initializing configurations using either an AWS profile
+    or environment variables. If an AWS profile is specified, it attempts to use
+    that profile to create a boto3 session. If no profile is specified, it falls back
+    to using credentials specified in environment variables.
 
-    @staticmethod
-    def get_env(var):
-        """Read environment variable."""
-        if not os.environ.get(var):
-            raise ValueError(
-                "Error: You must export environment variable {}".format(var)
+    Attributes:
+        session (boto3.Session): A boto3 Session object initialized.
+        region_name (str): The AWS region name.
+        s3_endpoint (str): The custom S3 endpoint URL.
+    """
+
+    def __init__(self, profile_name=None, region_name=None, s3_endpoint=None):
+        """
+        Initialize configurations using AWS profile or environment variables.
+        If a profile name is provided, it will use that profile.
+        Otherwise, it checks for environment variables and raises an error if they are not set.
+
+        Params:
+            profile_name (str, optional): The name of the AWS profile to use.
+            region_name (str, optional): The AWS region name to use.
+            s3_endpoint (str, optional): The custom S3 endpoint URL.
+        """
+        self.region_name = region_name
+        self.s3_endpoint = s3_endpoint
+
+        if profile_name:
+            self.session = boto3.Session(
+                profile_name=profile_name, region_name=region_name
             )
-        return os.environ.get(var)
+            try:
+                if not self.session.get_credentials():
+                    raise ValueError(
+                        f"Could not find credentials for AWS profile '{profile_name}'"
+                    )
+            except botocore.exceptions.PartialCredentialsError as e:
+                raise ValueError(
+                    f"Partial credentials found for AWS profile '{profile_name}'. {e}"
+                )
+        else:
+            self.aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+            self.aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+            self.aws_session_token = os.getenv("AWS_SESSION_TOKEN")  # Optional
+
+            if not self.aws_access_key or not self.aws_secret_key:
+                raise ValueError(
+                    "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set in environment variables."
+                )
+
+            self.session = boto3.Session(
+                region_name=region_name,
+                aws_access_key_id=self.aws_access_key,
+                aws_secret_access_key=self.aws_secret_key,
+                aws_session_token=self.aws_session_token,
+            )
+
+    def get_session(self):
+        """
+        Returns the boto3 session.
+
+        Returns:
+            boto3.Session: The initialized boto3 session.
+        """
+        return self.session
 
 
 class ProgressBar(tqdm.tqdm):
@@ -354,39 +412,39 @@ class ProgressBar(tqdm.tqdm):
 
 
 class S3:
-    """Class to handle S3 operations."""
+    """
+    Class to handle S3 operations.
 
-    def __init__(self, key, secret, s3_endpoint, region_name):
+    Attributes:
+        s3_resource (boto3.resource): The boto3 S3 resource object used to interact with S3.
+        disable_pbar (bool): Flag to disable the progress bar display.
+        buckets_exist (list): A list to cache bucket existence checks.
+    """
+
+    def __init__(self, config):
         """
-        Initialize s3 class.
+        Initializes the S3 manager with configurations provided by the Config object.
 
         Params:
-            key           (str): AWS_ACCESS_KEY_ID
-            secret        (str): AWS_SECRET_ACCESS_KEY
-            s3_endpoint   (str): S3 endpoint URL
-            region_name   (str): Region Name
+            config (Config): The configuration object providing the session,
+                             region, and S3 endpoint information.
         """
-        self.s3_resource = boto3.resource(
-            "s3",
-            endpoint_url=s3_endpoint,
-            verify=False,
-            region_name=region_name,
-            aws_access_key_id=key,
-            aws_secret_access_key=secret,
+        boto3_session = config.get_session()
+        self.s3_resource = boto3_session.resource(
+            "s3", endpoint_url=config.s3_endpoint, region_name=config.region_name
         )
         self.disable_pbar = False
         self.buckets_exist = []
 
     def check_bucket_exist(self, bucket_name):
         """
-        Verify if a bucket exists.
+        Checks if the specified bucket exists and caches the result.
 
         Params:
             bucket_name           (str): Bucket name
 
         Return:
-            True  : bucket exists
-            False : bucket does not exist
+            bool: True if the bucket exists, False otherwise.
         """
         # If bucket was already checked, return it exists
         if bucket_name in self.buckets_exist:
@@ -770,47 +828,89 @@ def cmd_list_obj(s3, args):
 ##############################################################################
 # Upload a file to S3
 ##############################################################################
-def upload_single_file(s3, bucket_name, file_name, nokeepdir):
-    """Upload single file to S3."""
-    # Configure the object name
-    # if nokeepdir, remove the path from key_name, otherwise
-    # the key_name is the same as file_name
-    key_name = file_name.split("/")[-1] if nokeepdir else file_name
+def upload_file_to_s3(s3, bucket_name, file_path, object_name):
+    """
+    Upload a single file to an S3 bucket.
 
-    msg("cyan", "Uploading file {} with object name {}".format(file_name, key_name))
+    Parameters:
+        s3 (S3): An instance of the S3 class.
+        bucket_name (str): The name of the S3 bucket where the file will be uploaded.
+        file_path (str): The path of the file on the local file system to upload.
+        object_name (str): The target object name in the S3 bucket. This is the name
+                           that will be used to store the file in the bucket.
+    """
+
+    msg("cyan", f"Uploading file {file_path} with object name {object_name}")
 
     try:
-        s3.upload_file(bucket_name, file_name, key_name)
+        s3.upload_file(bucket_name, file_path, object_name)
     except PermissionError:
-        msg("red", "Error: permission denied to read file {}".format(file_name), 1)
+        msg("red", f"Error: permission denied to read file {file_path}", 1)
     except FileNotFoundError:
-        msg("red", "Error: File '{}' not found".format(file_name), 1)
+        msg("red", f"Error: File '{file_path}' not found", 1)
 
     msg("green", "  - Upload completed successfully")
+
+
+def upload_construct_object_name(file_path, prefix, nokeepdir):
+    """
+    Construct the object name for S3 upload, considering prefix and directory structure.
+
+    Args:
+        file_path (str): The path to the file being uploaded.
+        prefix (str): The prefix string to prepend to the object name.
+        nokeepdir (bool): Flag to keep or discard the directory structure in the object name.
+    """
+    # Extract the base filename if nokeepdir is set; otherwise, use the full file_path
+    base_name = os.path.basename(file_path) if nokeepdir else file_path
+
+    # Add the prefix to the object_name
+    return f"{prefix}{base_name}"
 
 
 ##############################################################################
 # Command to upload file or directory
 ##############################################################################
 def cmd_upload(s3, args):
-    """Handle upload option."""
+    """
+    Command to upload files or directories to an S3 bucket.
+
+    This function handles the 'upload' command line argument. It uploads
+    either a single file or all files within a directory to the specified S3 bucket.
+
+    Args:
+        s3 (S3): An instance of the S3 class.
+        args (argparse.Namespace): Command line arguments.
+    """
     # Check if bucket exist
     if not s3.check_bucket_exist(args.bucket):
-        msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
+        msg("red", f"Error: Bucket '{args.bucket}' does not exist", 1)
 
     s3.disable_pbar = args.nopbar
 
     if args.filename:
-        upload_single_file(s3, args.bucket, args.filename, args.nokeepdir)
+        if os.path.isfile(args.filename):
+            object_name = upload_construct_object_name(
+                args.filename, args.prefix, args.nokeepdir
+            )
+            upload_file_to_s3(s3, args.bucket, args.filename, object_name)
+        else:
+            msg(
+                "red",
+                f"Error: The specified file '{args.filename}' does not exist or is a directory",
+                1,
+            )
 
     if args.dir:
         if not os.path.isdir(args.dir):
-            msg("red", "Error: Directory '{}' not found".format(args.dir), 1)
-
+            msg("red", f"Error: Directory '{args.dir}' not found", 1)
         for dirpath, _dirnames, files in os.walk(args.dir):
             for filename in files:
                 file_path = os.path.join(dirpath, filename)
-                upload_single_file(s3, args.bucket, file_path, args.nokeepdir)
+                object_name = upload_construct_object_name(
+                    file_path, args.prefix, args.nokeepdir
+                )
+                upload_file_to_s3(s3, args.bucket, file_path, object_name)
 
 
 ##############################################################################
@@ -862,16 +962,15 @@ def main():
     log.debug("CMD line args: %s", vars(args))
 
     try:
-        config = Config()
+        config = Config(
+            profile_name=args.aws_profile,
+            region_name=args.region_name,
+            s3_endpoint=args.endpoint,
+        )
     except ValueError as error:
         msg("red", str(error), 1)
 
-    s3 = S3(
-        config.aws_access_key_id,
-        config.aws_secret_access_key,
-        args.endpoint,
-        args.region_name,
-    )
+    s3 = S3(config)
 
     # Execute the function (command)
     if args.command is not None:

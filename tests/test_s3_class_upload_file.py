@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 """Test s3 class."""
 
-import pytest
 from unittest.mock import Mock
 
-from s3_client import s3_client
-
 from conftest import BUCKET_NAME, TMP_FILENAME
+
+from s3_client import s3_client
 
 
 def test_upload_file(tmp_filename, s3, s3_bucket):

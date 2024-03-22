@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """Test s3 class."""
+# flake8: noqa: F841
 
-import pytest
 from unittest.mock import Mock, patch
 
-from s3_client import s3_client
+from conftest import BUCKET_NAME
 
-from conftest import KEY_NAMES, BUCKET_NAME
+from s3_client import s3_client
 
 DELETE_KEY = "A"
 

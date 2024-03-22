@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 """Test Download class."""
 
-import pytest
 from unittest.mock import Mock
 
-from s3_client import s3_client
-
 from conftest import TMP_FILENAME
+
+from s3_client import s3_client
 
 
 def test_download_file(download, tmp_filename):
