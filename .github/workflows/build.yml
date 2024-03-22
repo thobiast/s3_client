@@ -1,49 +1,28 @@
-name: build
+name: Build and Test
+
 on:
-  pull_request:
   push:
-    branches: [master]
+    branches:
+      - master
+  pull_request:
+
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.x'
-      - name: Display Python version
-        run: python -c "import sys; print(sys.version)"
-      - name: Install tox
-        run: pip install --upgrade tox black
-      - name: Run tox flake8
-        run: tox -e flake8
-      - name: Run tox pylint
-        run: tox -e pylint
-      - name: Run tox black
-        run: tox -e black
-  test:
-    needs: lint
+  build:
+
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.6, 3.7, 3.8]
+        python-version: ["3.9", "3.10", "3.11"]
+
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
-      - name: install tox
-        run: python -m pip install --upgrade tox virtualenv setuptools pip
-      - name: run tox tests
-        run: tox -e py
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
-        with:
-          file: ./coverage.xml
-          flags: unittests
-          env_vars: OS,PYTHON
-          fail_ci_if_error: true
+      - name: Install dependencies
+        run: python -m pip install --upgrade pre-commit tox virtualenv setuptools pip
+      - name: run tox
+        run: tox
