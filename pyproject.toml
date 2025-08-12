@@ -1,0 +1,31 @@
+[project]
+name = "s3-client"
+description = "Sample python script to work with Amazon S3."
+readme = "README.md"
+license = {file = "LICENSE"}
+dynamic = ["version", "dependencies"]
+requires-python = ">=3.7"
+authors = [
+    {name = "Thobias Salazar Trevisan"},
+]
+
+[project.scripts]
+s3-client = "s3_client.s3_client:main"
+
+[project.urls]
+"Homepage" = "https://github.com/thobiast/s3_client"
+"Source" = "https://github.com/thobiast/s3_client"
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = {attr = "s3_client.__version__"}
+dependencies = {file = ["requirements.txt"]}
+
+[tool.black]
+line-length = 100
+
+[tool.pylint]
+max-line-length = 100
