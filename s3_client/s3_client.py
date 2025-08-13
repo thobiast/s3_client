@@ -13,6 +13,7 @@ import os
 import pprint
 import sys
 import time
+from pathlib import Path
 
 import boto3
 import botocore
@@ -282,28 +283,6 @@ def msg(color, msg_text, exitcode=0, *, end="\n", flush=True, output=None):
         sys.exit(exitcode)
 
 
-def create_dir(dir_name):
-    """
-    Create a local directory. It supports nested directory.
-
-    Params:
-        dir_name   (str): Directory to create
-    """
-    # Check if dir_name already exist
-    if os.path.exists(dir_name):
-        if os.path.isfile(dir_name):
-            msg(
-                "red",
-                "Error: path {} exists and is not a directory".format(dir_name),
-                1,
-            )
-    else:
-        try:
-            os.makedirs(dir_name)
-        except PermissionError:
-            msg("red", "Error: PermissionError to create dir {}".format(dir_name), 1)
-
-
 def time_elapsed(func):
     """
     Calculate elapsed time in seconds.
@@ -430,6 +409,7 @@ class S3:
                              region, and S3 endpoint information.
         """
         boto3_session = config.get_session()
+
         self.s3_resource = boto3_session.resource(
             "s3", endpoint_url=config.s3_endpoint, region_name=config.region_name
         )
@@ -654,7 +634,7 @@ class Download:
         """
         self.s3 = s3
         self.bucket_name = bucket_name
-        self.local_dir = local_dir
+        self.local_dir = Path(local_dir)
 
     def download_file(self, object_name, overwrite, versionid=None):
         """
@@ -665,26 +645,39 @@ class Download:
             overwrite     (True/False): Overwrite local file if it already exists
             versionid            (str): Object version id
         """
-        # set full file path to store the object
-        dest_name = self.define_dest_name(object_name)
+        # Stripping leading slashes to ensure relative join
+        safe_object_name = object_name.lstrip("/")
+        # Set full file path to store the object
+        dest_path = self.local_dir.joinpath(safe_object_name)
 
-        if not overwrite:
-            # Check if destination file already exists
-            self.check_file_exist(dest_name)
+        # Check if destination file already exists and overwrite is false
+        if not overwrite and dest_path.is_file():
+            msg(
+                "red",
+                f"Error: File {dest_path} exists. Use --overwrite to replace it.",
+                1,
+            )
+        # Create parent directories if they don't exist
+        try:
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            msg(
+                "red",
+                f"Error: Permission denied to create directory {dest_path.parent}",
+                1,
+            )
 
-        # If necessary, create directories structure to save the downloaded file
-        local_path = "/".join(dest_name.split("/")[:-1])
-        create_dir(local_path)
-
-        msg("cyan", "Downloading object {} to path {}".format(object_name, dest_name))
+        msg("cyan", f"Downloading object {object_name} to path {dest_path}")
 
         try:
-            self.s3.download_object(self.bucket_name, object_name, dest_name, versionid)
+            self.s3.download_object(
+                self.bucket_name, object_name, str(dest_path), versionid
+            )
         except PermissionError:
-            msg("red", "Error: Permission denied to write file {}".format(dest_name), 1)
+            msg("red", f"Error: Permission denied to write file {dest_path}", 1)
         except botocore.exceptions.ClientError as error:
             if error.response["Error"]["Code"] == "404":
-                msg("red", "Error:  object '{}' not found.".format(object_name), 1)
+                msg("red", f"Error:  object '{object_name}' not found.", 1)
             else:
                 raise
 
@@ -700,35 +693,6 @@ class Download:
         """
         for obj in self.s3.list_objects(self.bucket_name, prefix=prefix):
             self.download_file(obj.key, overwrite)
-
-    def define_dest_name(self, object_name):
-        """
-        Return the full path of the file to store the object.
-
-        Concatenate local_dir with object_name
-        """
-        # Check if its needed to add a '/' between local_dir and object_name
-        if not self.local_dir.endswith("/") and not object_name.startswith("/"):
-            dest_name = self.local_dir + "/" + object_name
-        # Removes duplicated '/' between local_dir and object_name
-        elif self.local_dir.endswith("/") and object_name.startswith("/"):
-            dest_name = self.local_dir + object_name[1:]
-        else:
-            dest_name = self.local_dir + object_name
-
-        return dest_name
-
-    @staticmethod
-    def check_file_exist(file_name):
-        """Check if file exists."""
-        if os.path.isfile(file_name):
-            msg(
-                "red",
-                "Error: File {} exist. Remove it from local drive to download.".format(
-                    file_name
-                ),
-                1,
-            )
 
 
 ##############################################################################
