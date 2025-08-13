@@ -55,6 +55,16 @@ def parse_parameters():
     parser.add_argument(
         "--profile", default=None, dest="aws_profile", help="AWS profile to use"
     )
+    parser.add_argument(
+        "--checksum-policy",
+        dest="checksum_policy",
+        default=None,
+        choices=["when_supported", "when_required"],
+        help=(
+            "Apply checksum setting to both request and response. "
+            "Valid: %(choices)s. (default: %(default)s)"
+        ),
+    )
     # Add subcommands options
     subparsers = parser.add_subparsers(title="Commands", dest="command")
 
@@ -400,7 +410,7 @@ class S3:
         buckets_exist (list): A list to cache bucket existence checks.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, checksum_policy=None):
         """
         Initializes the S3 manager with configurations provided by the Config object.
 
@@ -410,8 +420,16 @@ class S3:
         """
         boto3_session = config.get_session()
 
+        boto3_config = botocore.config.Config(
+            request_checksum_calculation=checksum_policy,
+            response_checksum_validation=checksum_policy,
+        )
+
         self.s3_resource = boto3_session.resource(
-            "s3", endpoint_url=config.s3_endpoint, region_name=config.region_name
+            "s3",
+            endpoint_url=config.s3_endpoint,
+            region_name=config.region_name,
+            config=boto3_config,
         )
         self.disable_pbar = False
         self.buckets_exist = []
@@ -934,7 +952,7 @@ def main():
     except ValueError as error:
         msg("red", str(error), 1)
 
-    s3 = S3(config)
+    s3 = S3(config, checksum_policy=args.checksum_policy)
 
     # Execute the function (command)
     if args.command is not None:
