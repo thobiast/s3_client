@@ -481,6 +481,37 @@ class S3:
         """
         return self.s3_resource.buckets.all()
 
+    def _list_objects(self, collection_type, bucket_name, *, prefix=None, limit=None):
+        """
+        Helper to list items from a specified S3 bucket collection.
+
+        This method consolidates the common logic for listing both current objects
+        and object versions in a bucket. It dynamically accesses the corresponding
+        Boto3 collection (e.g., ``objects`` or ``object_versions``) on the bucket
+        resource and applies optional filtering and limiting.
+
+        Params:
+            collection_type   (str): The name of the Boto3 collection attribute to access,
+                                     such as 'objects' or 'object_versions'
+            bucket_name       (str): The name of the target S3 bucket
+            prefix            (str): A string used to filter items that begin
+                                     with this prefix. Defaults to None
+            limit             (int): The maximum number of items to return.
+                                     Defaults to None
+
+        Returns:
+        boto3.resources.collection.s3.BucketCollection: An iterable
+            collection of S3 resources (like ObjectSummary or ObjectVersion)
+            that match the specified criteria.
+        """
+        bucket = self.s3_resource.Bucket(bucket_name)
+        collection = getattr(bucket, collection_type)
+
+        if prefix:
+            return collection.filter(Prefix=prefix).limit(limit)
+
+        return collection.all().limit(limit)
+
     def list_objects(self, bucket_name, *, prefix=None, limit=None):
         """
         List objects stored in a bucket.
@@ -497,16 +528,7 @@ class S3:
         Returns:
             An iterable of ObjectSummary resources
         """
-        if prefix:
-            return (
-                self.s3_resource.Bucket(bucket_name)
-                .objects.filter(
-                    Prefix=prefix,
-                )
-                .limit(limit)
-            )
-        else:
-            return self.s3_resource.Bucket(bucket_name).objects.all().limit(limit)
+        return self._list_objects("objects", bucket_name, prefix=prefix, limit=limit)
 
     def list_objects_versions(self, bucket_name, *, prefix=None, limit=None):
         """
@@ -524,18 +546,9 @@ class S3:
         Returns:
             An iterable of ObjectVersion resources
         """
-        if prefix:
-            return (
-                self.s3_resource.Bucket(bucket_name)
-                .object_versions.filter(
-                    Prefix=prefix,
-                )
-                .limit(limit)
-            )
-        else:
-            return (
-                self.s3_resource.Bucket(bucket_name).object_versions.all().limit(limit)
-            )
+        return self._list_objects(
+            "object_versions", bucket_name, prefix=prefix, limit=limit
+        )
 
     def metadata_object(self, bucket_name, object_name):
         """
