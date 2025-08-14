@@ -884,19 +884,18 @@ def cmd_upload(s3, args):
 
     s3.disable_pbar = args.nopbar
 
+    # Local filesystem paths of files to upload
+    files_to_upload = []
+
     if args.filename:
         file_path = Path(args.filename)
-        if file_path.is_file():
-            object_name = upload_construct_object_name(
-                str(file_path), args.prefix, args.nokeepdir
-            )
-            upload_file_to_s3(s3, args.bucket, str(file_path), object_name)
-        else:
+        if not file_path.is_file():
             msg(
                 "red",
-                f"Error: The specified file '{args.filename}' does not exist or is not a file.",
+                f"Error: File '{args.filename}' does not exist or is not a file.",
                 1,
             )
+        files_to_upload.append(file_path)
 
     if args.dir:
         dir_path = Path(args.dir)
@@ -906,10 +905,17 @@ def cmd_upload(s3, args):
         for dirpath, _dirnames, files in os.walk(args.dir):
             for filename in files:
                 full_path = Path(dirpath).joinpath(filename)
-                object_name = upload_construct_object_name(
-                    str(full_path), args.prefix, args.nokeepdir
-                )
-                upload_file_to_s3(s3, args.bucket, str(full_path), object_name)
+                files_to_upload.append(full_path)
+
+    if not files_to_upload:
+        msg("yellow", "No files found to upload.")
+        return
+
+    for file in files_to_upload:
+        object_name = upload_construct_object_name(
+            str(file), args.prefix, args.nokeepdir
+        )
+        upload_file_to_s3(s3, args.bucket, str(file), object_name)
 
 
 ##############################################################################
