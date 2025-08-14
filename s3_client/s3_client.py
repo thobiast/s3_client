@@ -583,7 +583,7 @@ class S3:
 
         log.debug("Uploading file: %s with key: %s", file_name, key_name)
 
-        obj_size = os.path.getsize(file_name)
+        obj_size = Path(file_name).stat().st_size
         with ProgressBar(
             unit="B",
             unit_scale=True,
@@ -834,17 +834,18 @@ def upload_file_to_s3(s3, bucket_name, file_path, object_name):
     msg("green", "  - Upload completed successfully")
 
 
-def upload_construct_object_name(file_path, prefix, nokeepdir):
+def upload_construct_object_name(file_path_str, prefix, nokeepdir):
     """
     Construct the object name for S3 upload, considering prefix and directory structure.
 
     Args:
-        file_path (str): The path to the file being uploaded.
+        file_path_str (str): The path to the file being uploaded.
         prefix (str): The prefix string to prepend to the object name.
         nokeepdir (bool): Flag to keep or discard the directory structure in the object name.
     """
+    file_path = Path(file_path_str)
     # Extract the base filename if nokeepdir is set; otherwise, use the full file_path
-    base_name = os.path.basename(file_path) if nokeepdir else file_path
+    base_name = file_path.name if nokeepdir else file_path_str
 
     # Add the prefix to the object_name
     return f"{prefix}{base_name}"
@@ -871,28 +872,31 @@ def cmd_upload(s3, args):
     s3.disable_pbar = args.nopbar
 
     if args.filename:
-        if os.path.isfile(args.filename):
+        file_path = Path(args.filename)
+        if file_path.is_file():
             object_name = upload_construct_object_name(
-                args.filename, args.prefix, args.nokeepdir
+                str(file_path), args.prefix, args.nokeepdir
             )
-            upload_file_to_s3(s3, args.bucket, args.filename, object_name)
+            upload_file_to_s3(s3, args.bucket, str(file_path), object_name)
         else:
             msg(
                 "red",
-                f"Error: The specified file '{args.filename}' does not exist or is a directory",
+                f"Error: The specified file '{args.filename}' does not exist or is not a file.",
                 1,
             )
 
     if args.dir:
-        if not os.path.isdir(args.dir):
-            msg("red", f"Error: Directory '{args.dir}' not found", 1)
+        dir_path = Path(args.dir)
+        if not dir_path.is_dir():
+            msg("red", f"Error: Directory '{dir_path}' not found", 1)
+        # Use os.walk for Python <3.12 compatibility. Migrate to Path.walk() later
         for dirpath, _dirnames, files in os.walk(args.dir):
             for filename in files:
-                file_path = os.path.join(dirpath, filename)
+                full_path = Path(dirpath).joinpath(filename)
                 object_name = upload_construct_object_name(
-                    file_path, args.prefix, args.nokeepdir
+                    str(full_path), args.prefix, args.nokeepdir
                 )
-                upload_file_to_s3(s3, args.bucket, file_path, object_name)
+                upload_file_to_s3(s3, args.bucket, str(full_path), object_name)
 
 
 ##############################################################################
@@ -902,13 +906,14 @@ def cmd_download(s3, args):
     """Handle download option."""
     # Check if bucket exist
     if not s3.check_bucket_exist(args.bucket):
-        msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
+        msg("red", f"Error: Bucket '{args.bucket}' does not exist", 1)
 
     s3.disable_pbar = args.nopbar
 
     # Check if local directory exists
-    if not os.path.exists(args.localdir):
-        msg("red", "Error: directory {} does not exist".format(args.localdir), 1)
+    local_path = Path(args.localdir)
+    if not local_path.is_dir():
+        msg("red", f"Error: local path '{local_path}' is not a valid directory", 1)
 
     download = Download(s3, args.bucket, args.localdir)
 
