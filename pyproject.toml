@@ -20,6 +20,9 @@ s3-client = "s3_client.s3_client:main"
 requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+packages = ["s3_client"]
+
 [tool.setuptools.dynamic]
 version = {attr = "s3_client.__version__"}
 dependencies = {file = ["requirements.txt"]}
