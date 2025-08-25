@@ -13,6 +13,7 @@ import os
 import pprint
 import sys
 import time
+from pathlib import Path
 
 import boto3
 import botocore
@@ -53,6 +54,16 @@ def parse_parameters():
     )
     parser.add_argument(
         "--profile", default=None, dest="aws_profile", help="AWS profile to use"
+    )
+    parser.add_argument(
+        "--checksum-policy",
+        dest="checksum_policy",
+        default=None,
+        choices=["when_supported", "when_required"],
+        help=(
+            "Apply checksum setting to both request and response. "
+            "Valid: %(choices)s. (default: %(default)s)"
+        ),
     )
     # Add subcommands options
     subparsers = parser.add_subparsers(title="Commands", dest="command")
@@ -282,28 +293,6 @@ def msg(color, msg_text, exitcode=0, *, end="\n", flush=True, output=None):
         sys.exit(exitcode)
 
 
-def create_dir(dir_name):
-    """
-    Create a local directory. It supports nested directory.
-
-    Params:
-        dir_name   (str): Directory to create
-    """
-    # Check if dir_name already exist
-    if os.path.exists(dir_name):
-        if os.path.isfile(dir_name):
-            msg(
-                "red",
-                "Error: path {} exists and is not a directory".format(dir_name),
-                1,
-            )
-    else:
-        try:
-            os.makedirs(dir_name)
-        except PermissionError:
-            msg("red", "Error: PermissionError to create dir {}".format(dir_name), 1)
-
-
 def time_elapsed(func):
     """
     Calculate elapsed time in seconds.
@@ -421,7 +410,7 @@ class S3:
         buckets_exist (list): A list to cache bucket existence checks.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, checksum_policy=None):
         """
         Initializes the S3 manager with configurations provided by the Config object.
 
@@ -430,8 +419,17 @@ class S3:
                              region, and S3 endpoint information.
         """
         boto3_session = config.get_session()
+
+        boto3_config = botocore.config.Config(
+            request_checksum_calculation=checksum_policy,
+            response_checksum_validation=checksum_policy,
+        )
+
         self.s3_resource = boto3_session.resource(
-            "s3", endpoint_url=config.s3_endpoint, region_name=config.region_name
+            "s3",
+            endpoint_url=config.s3_endpoint,
+            region_name=config.region_name,
+            config=boto3_config,
         )
         self.disable_pbar = False
         self.buckets_exist = []
@@ -483,6 +481,37 @@ class S3:
         """
         return self.s3_resource.buckets.all()
 
+    def _list_objects(self, collection_type, bucket_name, *, prefix=None, limit=None):
+        """
+        Helper to list items from a specified S3 bucket collection.
+
+        This method consolidates the common logic for listing both current objects
+        and object versions in a bucket. It dynamically accesses the corresponding
+        Boto3 collection (e.g., ``objects`` or ``object_versions``) on the bucket
+        resource and applies optional filtering and limiting.
+
+        Params:
+            collection_type   (str): The name of the Boto3 collection attribute to access,
+                                     such as 'objects' or 'object_versions'
+            bucket_name       (str): The name of the target S3 bucket
+            prefix            (str): A string used to filter items that begin
+                                     with this prefix. Defaults to None
+            limit             (int): The maximum number of items to return.
+                                     Defaults to None
+
+        Returns:
+        boto3.resources.collection.s3.BucketCollection: An iterable
+            collection of S3 resources (like ObjectSummary or ObjectVersion)
+            that match the specified criteria.
+        """
+        bucket = self.s3_resource.Bucket(bucket_name)
+        collection = getattr(bucket, collection_type)
+
+        if prefix:
+            return collection.filter(Prefix=prefix).limit(limit)
+
+        return collection.all().limit(limit)
+
     def list_objects(self, bucket_name, *, prefix=None, limit=None):
         """
         List objects stored in a bucket.
@@ -499,16 +528,7 @@ class S3:
         Returns:
             An iterable of ObjectSummary resources
         """
-        if prefix:
-            return (
-                self.s3_resource.Bucket(bucket_name)
-                .objects.filter(
-                    Prefix=prefix,
-                )
-                .limit(limit)
-            )
-        else:
-            return self.s3_resource.Bucket(bucket_name).objects.all().limit(limit)
+        return self._list_objects("objects", bucket_name, prefix=prefix, limit=limit)
 
     def list_objects_versions(self, bucket_name, *, prefix=None, limit=None):
         """
@@ -526,18 +546,9 @@ class S3:
         Returns:
             An iterable of ObjectVersion resources
         """
-        if prefix:
-            return (
-                self.s3_resource.Bucket(bucket_name)
-                .object_versions.filter(
-                    Prefix=prefix,
-                )
-                .limit(limit)
-            )
-        else:
-            return (
-                self.s3_resource.Bucket(bucket_name).object_versions.all().limit(limit)
-            )
+        return self._list_objects(
+            "object_versions", bucket_name, prefix=prefix, limit=limit
+        )
 
     def metadata_object(self, bucket_name, object_name):
         """
@@ -585,7 +596,7 @@ class S3:
 
         log.debug("Uploading file: %s with key: %s", file_name, key_name)
 
-        obj_size = os.path.getsize(file_name)
+        obj_size = Path(file_name).stat().st_size
         with ProgressBar(
             unit="B",
             unit_scale=True,
@@ -654,7 +665,7 @@ class Download:
         """
         self.s3 = s3
         self.bucket_name = bucket_name
-        self.local_dir = local_dir
+        self.local_dir = Path(local_dir)
 
     def download_file(self, object_name, overwrite, versionid=None):
         """
@@ -665,26 +676,39 @@ class Download:
             overwrite     (True/False): Overwrite local file if it already exists
             versionid            (str): Object version id
         """
-        # set full file path to store the object
-        dest_name = self.define_dest_name(object_name)
+        # Stripping leading slashes to ensure relative join
+        safe_object_name = object_name.lstrip("/")
+        # Set full file path to store the object
+        dest_path = self.local_dir.joinpath(safe_object_name)
 
-        if not overwrite:
-            # Check if destination file already exists
-            self.check_file_exist(dest_name)
+        # Check if destination file already exists and overwrite is false
+        if not overwrite and dest_path.is_file():
+            msg(
+                "red",
+                f"Error: File {dest_path} exists. Use --overwrite to replace it.",
+                1,
+            )
+        # Create parent directories if they don't exist
+        try:
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            msg(
+                "red",
+                f"Error: Permission denied to create directory {dest_path.parent}",
+                1,
+            )
 
-        # If necessary, create directories structure to save the downloaded file
-        local_path = "/".join(dest_name.split("/")[:-1])
-        create_dir(local_path)
-
-        msg("cyan", "Downloading object {} to path {}".format(object_name, dest_name))
+        msg("cyan", f"Downloading object {object_name} to path {dest_path}")
 
         try:
-            self.s3.download_object(self.bucket_name, object_name, dest_name, versionid)
+            self.s3.download_object(
+                self.bucket_name, object_name, str(dest_path), versionid
+            )
         except PermissionError:
-            msg("red", "Error: Permission denied to write file {}".format(dest_name), 1)
+            msg("red", f"Error: Permission denied to write file {dest_path}", 1)
         except botocore.exceptions.ClientError as error:
             if error.response["Error"]["Code"] == "404":
-                msg("red", "Error:  object '{}' not found.".format(object_name), 1)
+                msg("red", f"Error:  object '{object_name}' not found.", 1)
             else:
                 raise
 
@@ -700,35 +724,6 @@ class Download:
         """
         for obj in self.s3.list_objects(self.bucket_name, prefix=prefix):
             self.download_file(obj.key, overwrite)
-
-    def define_dest_name(self, object_name):
-        """
-        Return the full path of the file to store the object.
-
-        Concatenate local_dir with object_name
-        """
-        # Check if its needed to add a '/' between local_dir and object_name
-        if not self.local_dir.endswith("/") and not object_name.startswith("/"):
-            dest_name = self.local_dir + "/" + object_name
-        # Removes duplicated '/' between local_dir and object_name
-        elif self.local_dir.endswith("/") and object_name.startswith("/"):
-            dest_name = self.local_dir + object_name[1:]
-        else:
-            dest_name = self.local_dir + object_name
-
-        return dest_name
-
-    @staticmethod
-    def check_file_exist(file_name):
-        """Check if file exists."""
-        if os.path.isfile(file_name):
-            msg(
-                "red",
-                "Error: File {} exist. Remove it from local drive to download.".format(
-                    file_name
-                ),
-                1,
-            )
 
 
 ##############################################################################
@@ -852,17 +847,18 @@ def upload_file_to_s3(s3, bucket_name, file_path, object_name):
     msg("green", "  - Upload completed successfully")
 
 
-def upload_construct_object_name(file_path, prefix, nokeepdir):
+def upload_construct_object_name(file_path_str, prefix, nokeepdir):
     """
     Construct the object name for S3 upload, considering prefix and directory structure.
 
     Args:
-        file_path (str): The path to the file being uploaded.
+        file_path_str (str): The path to the file being uploaded.
         prefix (str): The prefix string to prepend to the object name.
         nokeepdir (bool): Flag to keep or discard the directory structure in the object name.
     """
+    file_path = Path(file_path_str)
     # Extract the base filename if nokeepdir is set; otherwise, use the full file_path
-    base_name = os.path.basename(file_path) if nokeepdir else file_path
+    base_name = file_path.name if nokeepdir else file_path_str
 
     # Add the prefix to the object_name
     return f"{prefix}{base_name}"
@@ -888,29 +884,38 @@ def cmd_upload(s3, args):
 
     s3.disable_pbar = args.nopbar
 
+    # Local filesystem paths of files to upload
+    files_to_upload = []
+
     if args.filename:
-        if os.path.isfile(args.filename):
-            object_name = upload_construct_object_name(
-                args.filename, args.prefix, args.nokeepdir
-            )
-            upload_file_to_s3(s3, args.bucket, args.filename, object_name)
-        else:
+        file_path = Path(args.filename)
+        if not file_path.is_file():
             msg(
                 "red",
-                f"Error: The specified file '{args.filename}' does not exist or is a directory",
+                f"Error: File '{args.filename}' does not exist or is not a file.",
                 1,
             )
+        files_to_upload.append(file_path)
 
     if args.dir:
-        if not os.path.isdir(args.dir):
-            msg("red", f"Error: Directory '{args.dir}' not found", 1)
+        dir_path = Path(args.dir)
+        if not dir_path.is_dir():
+            msg("red", f"Error: Directory '{dir_path}' not found", 1)
+        # Use os.walk for Python <3.12 compatibility. Migrate to Path.walk() later
         for dirpath, _dirnames, files in os.walk(args.dir):
             for filename in files:
-                file_path = os.path.join(dirpath, filename)
-                object_name = upload_construct_object_name(
-                    file_path, args.prefix, args.nokeepdir
-                )
-                upload_file_to_s3(s3, args.bucket, file_path, object_name)
+                full_path = Path(dirpath).joinpath(filename)
+                files_to_upload.append(full_path)
+
+    if not files_to_upload:
+        msg("yellow", "No files found to upload.")
+        return
+
+    for file in files_to_upload:
+        object_name = upload_construct_object_name(
+            str(file), args.prefix, args.nokeepdir
+        )
+        upload_file_to_s3(s3, args.bucket, str(file), object_name)
 
 
 ##############################################################################
@@ -920,13 +925,14 @@ def cmd_download(s3, args):
     """Handle download option."""
     # Check if bucket exist
     if not s3.check_bucket_exist(args.bucket):
-        msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
+        msg("red", f"Error: Bucket '{args.bucket}' does not exist", 1)
 
     s3.disable_pbar = args.nopbar
 
     # Check if local directory exists
-    if not os.path.exists(args.localdir):
-        msg("red", "Error: directory {} does not exist".format(args.localdir), 1)
+    local_path = Path(args.localdir)
+    if not local_path.is_dir():
+        msg("red", f"Error: local path '{local_path}' is not a valid directory", 1)
 
     download = Download(s3, args.bucket, args.localdir)
 
@@ -970,7 +976,7 @@ def main():
     except ValueError as error:
         msg("red", str(error), 1)
 
-    s3 = S3(config)
+    s3 = S3(config, checksum_policy=args.checksum_policy)
 
     # Execute the function (command)
     if args.command is not None:
