@@ -555,13 +555,19 @@ class S3:
             object_name           (str): Object key name
             version_id            (str): Object version id
         """
-        obj = {"Key": object_name}
-        if version_id:
-            obj["VersionId"] = version_id
+        client = self.s3_resource.meta.client
 
-        return self.s3_resource.Bucket(bucket_name).delete_objects(
-            Delete={"Objects": [obj]}
-        )
+        if version_id:
+            return client.delete_object(
+                Bucket=bucket_name,
+                Key=object_name,
+                VersionId=version_id,
+            )
+        else:
+            return client.delete_object(
+                Bucket=bucket_name,
+                Key=object_name,
+            )
 
     @time_elapsed
     def upload_file(self, bucket_name, file_name, key_name=None):
@@ -746,7 +752,7 @@ def cmd_delete_obj(s3, args):
         msg("red", f"Error: Bucket '{args.bucket}' does not exist", 1)
 
     resp = s3.delete_object(args.bucket, args.object, args.versionid)
-    pprint.pprint(resp["Deleted"])
+    pprint.pprint(resp)
 
 
 ##############################################################################

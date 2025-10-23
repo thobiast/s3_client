@@ -20,7 +20,9 @@ def test_cmd_upload_file(s3, tmp_filename):
         prefix="",
     )
     s3_client.log = Mock()
-    with patch("s3_client.s3_client.upload_file_to_s3") as mock_upload:
+    with patch.object(s3, "check_bucket_exist", return_value=True), patch(
+        "s3_client.s3_client.upload_file_to_s3"
+    ) as mock_upload:
         s3_client.cmd_upload(s3, args)
         mock_upload.assert_called_once()
         called_args, _ = mock_upload.call_args
@@ -43,7 +45,9 @@ def test_cmd_upload_directory(s3, tmp_filename):
         prefix="",
     )
     s3_client.log = Mock()
-    with patch("s3_client.s3_client.upload_file_to_s3") as mock_upload:
+    with patch.object(s3, "check_bucket_exist", return_value=True), patch(
+        "s3_client.s3_client.upload_file_to_s3"
+    ) as mock_upload:
         s3_client.cmd_upload(s3, args)
         called_args, _ = mock_upload.call_args
         assert mock_upload.call_count == 1
@@ -69,7 +73,9 @@ def test_cmd_upload_directory_two_files(s3, directory_with_two_files):
     )
 
     s3_client.log = Mock()
-    with patch("s3_client.s3_client.upload_file_to_s3") as mock_upload:
+    with patch.object(s3, "check_bucket_exist", return_value=True), patch(
+        "s3_client.s3_client.upload_file_to_s3"
+    ) as mock_upload:
         s3_client.cmd_upload(s3, args)
         assert mock_upload.call_count == 2
         mock_upload.assert_any_call(s3, "test-bucket", str(file1), str(file1))
