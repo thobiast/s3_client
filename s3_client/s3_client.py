@@ -306,9 +306,7 @@ class Config:
     Handles configuration for AWS services by initializing a boto3 session.
 
     This class supports initializing configurations using either an AWS profile
-    or environment variables. If an AWS profile is specified, it attempts to use
-    that profile to create a boto3 session. If no profile is specified, it falls back
-    to using credentials specified in environment variables.
+    or environment variables. It uses boto3’s default credential chain.
 
     Attributes:
         session (boto3.Session): A boto3 Session object initialized.
@@ -319,8 +317,6 @@ class Config:
     def __init__(self, profile_name=None, region_name=None, s3_endpoint=None):
         """
         Initialize configurations using AWS profile or environment variables.
-        If a profile name is provided, it will use that profile.
-        Otherwise, it checks for environment variables and raises an error if they are not set.
 
         Params:
             profile_name (str, optional): The name of the AWS profile to use.
@@ -330,35 +326,24 @@ class Config:
         self.region_name = region_name
         self.s3_endpoint = s3_endpoint
 
-        if profile_name:
+        try:
             self.session = boto3.Session(
                 profile_name=profile_name, region_name=region_name
             )
-            try:
-                if not self.session.get_credentials():
-                    raise ValueError(
-                        f"Could not find credentials for AWS profile '{profile_name}'"
-                    )
-            except botocore.exceptions.PartialCredentialsError as e:
-                raise ValueError(
-                    f"Partial credentials found for AWS profile '{profile_name}'. {e}"
-                )
-        else:
-            self.aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
-            self.aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-            self.aws_session_token = os.getenv("AWS_SESSION_TOKEN")  # Optional
 
-            if not self.aws_access_key or not self.aws_secret_key:
+            # Ensure credentials exist
+            if not self.session.get_credentials():
                 raise ValueError(
-                    "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set in environment variables."
+                    "Could not find AWS credentials. "
+                    "Check environment variables or AWS profile."
                 )
-
-            self.session = boto3.Session(
-                region_name=region_name,
-                aws_access_key_id=self.aws_access_key,
-                aws_secret_access_key=self.aws_secret_key,
-                aws_session_token=self.aws_session_token,
+        except botocore.exceptions.ProfileNotFound:
+            raise ValueError(
+                f"AWS profile '{profile_name}' not found. "
+                "Check your ~/.aws/config and ~/.aws/credentials files."
             )
+        except Exception as e:
+            raise ValueError(f"Error initializing AWS session: {e}")
 
     def get_session(self):
         """

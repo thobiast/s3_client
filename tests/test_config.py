@@ -26,16 +26,15 @@ def test_config_env_var(mock_env_vars):
     assert session.get_credentials().token == "my_aws_token"
 
 
-@pytest.mark.parametrize("envvar", [("AWS_ACCESS_KEY_ID"), ("AWS_SECRET_ACCESS_KEY")])
-def test_config_missing_env_var(mock_env_vars, monkeypatch, envvar):
+def test_config_missing_env_var(monkeypatch):
     """Check config missing env var"""
     # Delete env
-    monkeypatch.delenv(envvar, raising=False)
-    with pytest.raises(
-        ValueError,
-        match="AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set in environment variables.",
-    ):
-        config = s3_client.Config()
+    monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("AWS_SESSION_TOKEN", raising=False)
+
+    with pytest.raises(ValueError, match=r"Could not find AWS credentials"):
+        s3_client.Config()
 
 
 def test_config_initialization(mock_env_vars):
