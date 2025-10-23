@@ -12,14 +12,16 @@ import logging
 import os
 import pprint
 import sys
+import threading
 import time
 from pathlib import Path
 
 import boto3
 import botocore
-import tabulate
-import tqdm
 import urllib3
+from rich import progress
+from rich.console import Console
+from rich.table import Table
 
 
 ##############################################################################
@@ -387,17 +389,15 @@ class Config:
         return self.session
 
 
-class ProgressBar(tqdm.tqdm):
-    """Class to display progress bar."""
+class RichProgressCallback:
+    def __init__(self, progress_obj, task_id):
+        self._progress = progress_obj
+        self._task_id = task_id
+        self._lock = threading.Lock()
 
-    def update_to(self, bytes_sent):
-        """
-        Update tqdm status bar.
-
-        Params:
-            bytes_sent    (int): number of bytes transferred
-        """
-        return self.update(bytes_sent)
+    def __call__(self, bytes_transferred):
+        with self._lock:
+            self._progress.update(self._task_id, advance=bytes_transferred)
 
 
 class S3:
@@ -423,6 +423,7 @@ class S3:
         boto3_config = botocore.config.Config(
             request_checksum_calculation=checksum_policy,
             response_checksum_validation=checksum_policy,
+            read_timeout=300,
         )
 
         self.s3_resource = boto3_session.resource(
@@ -597,18 +598,21 @@ class S3:
         log.debug("Uploading file: %s with key: %s", file_name, key_name)
 
         obj_size = Path(file_name).stat().st_size
-        with ProgressBar(
-            unit="B",
-            unit_scale=True,
-            desc="data transferred",
-            total=obj_size,
-            miniters=1,
+        with progress.Progress(
+            progress.TextColumn("[progress.description]{task.description}"),
+            progress.BarColumn(),
+            progress.TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            progress.TransferSpeedColumn(),
+            progress.TimeRemainingColumn(),
+            progress.TimeElapsedColumn(),
             disable=self.disable_pbar,
         ) as pbar:
+            task_id = pbar.add_task(f"Uploading [green]{file_name}[/]", total=obj_size)
+            callback = RichProgressCallback(pbar, task_id)
             self.s3_resource.Bucket(bucket_name).upload_file(
                 Filename=file_name,
                 Key=key_name,
-                Callback=pbar.update_to,
+                Callback=callback,
             )
 
     @time_elapsed
@@ -638,16 +642,21 @@ class S3:
             obj_size = self.s3_resource.ObjectSummary(bucket_name, object_name).size
 
         log.debug("obj_size: %s, extraargs: %s", obj_size, extraargs)
-        with ProgressBar(
-            unit="B",
-            unit_scale=True,
-            desc="data transferred",
-            total=obj_size,
-            miniters=1,
+
+        with progress.Progress(
+            progress.TextColumn("[progress.description]{task.description}"),
+            progress.BarColumn(),
+            progress.TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            progress.TransferSpeedColumn(),
+            progress.TimeRemainingColumn(),
             disable=self.disable_pbar,
         ) as pbar:
+            task_id = pbar.add_task(
+                f"Downloading [green]{object_name}[/]", total=obj_size
+            )
+            callback = RichProgressCallback(pbar, task_id)
             self.s3_resource.Bucket(bucket_name).download_file(
-                object_name, dest_name, ExtraArgs=extraargs, Callback=pbar.update_to
+                object_name, dest_name, ExtraArgs=extraargs, Callback=callback
             )
 
 
@@ -784,34 +793,69 @@ def cmd_list_obj(s3, args):
     if not s3.check_bucket_exist(args.bucket):
         msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
 
+    # Resource's attributes:
+    base_attrs = ["key", "size", "storage_class", "e_tag", "last_modified"]
+
     if args.versions:
         objects = s3.list_objects_versions(
             args.bucket, prefix=args.prefix, limit=args.limit
         )
-        # Resource's attributes:
-        attrs = [
-            "key",
-            "size",
-            "storage_class",
-            "e_tag",
-            "last_modified",
-            "version_id",
-            "is_latest",
-        ]
+        # Add version information to resource's attributes
+        attrs = base_attrs + ["version_id", "is_latest"]
     else:
         objects = s3.list_objects(args.bucket, prefix=args.prefix, limit=args.limit)
-        # Resource's attributes:
-        attrs = ["key", "size", "storage_class", "e_tag", "last_modified"]
+        attrs = base_attrs
 
     if args.table:
-        # Tabulate needs to keep the entire table in-memory
-        table = []
-        # Use the first row of data as a table header
-        table.append(attrs)
+        column_definitions = {
+            "key": ("Key", {"justify": "left", "style": "cyan", "overflow": "fold"}),
+            "size": ("Size", {"justify": "right", "style": "green", "no_wrap": True}),
+            "storage_class": ("Storage Class", {"justify": "left"}),
+            "e_tag": ("ETag", {"justify": "left", "style": "dim", "no_wrap": True}),
+            "last_modified": ("Last Modified", {"justify": "left", "style": "white"}),
+            "version_id": (
+                "Version ID",
+                {"justify": "left", "style": "dim", "no_wrap": True},
+            ),
+            "is_latest": ("Is Latest", {"justify": "center", "no_wrap": True}),
+        }
+        table = Table(
+            title=f"Objects in S3 Bucket {args.bucket}",
+            title_style="bold magenta",
+            header_style="bold",
+            show_lines=False,
+            pad_edge=False,
+            caption_style="dim",
+        )
+        for attr in attrs:
+            # Get the display name and style options
+            display_name, options = column_definitions.get(
+                attr, (attr.capitalize(), {})
+            )
+            table.add_column(display_name, **options)
+
+        total_size = 0
         for obj in objects:
-            line = [getattr(obj, attr) for attr in attrs]
-            table.append(line)
-        print(tabulate.tabulate(table, headers="firstrow", tablefmt="github"))
+            row_data = [str(getattr(obj, attr, "N/A")) for attr in attrs]
+            table.add_row(*row_data)
+            size = getattr(obj, "size", 0)
+            total_size += size
+
+        def format_size(num_bytes):
+            """Converts bytes to a human-readable string."""
+            if num_bytes == 0:
+                return "0 Bytes"
+            units = ["Bytes", "KB", "MB", "GB", "TB", "PB"]
+            i = 0
+            while num_bytes >= 1024 and i < len(units) - 1:
+                num_bytes /= 1024
+                i += 1
+            return f"{num_bytes:.2f} {units[i]}"
+
+        readable_size = format_size(total_size)
+        table.caption = f"{table.row_count} object(s)  •  total size {readable_size}"
+        console = Console()
+        console.print(table)
     else:
         for obj in objects:
             for attr in attrs:
