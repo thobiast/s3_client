@@ -119,6 +119,12 @@ def parse_parameters():
     metadata_parser = subparsers.add_parser("metadataobj", help="List object metadata")
     metadata_parser.add_argument("bucket", help="Bucket Name")
     metadata_parser.add_argument("object", help="Object Key Name")
+    metadata_parser.add_argument(
+        "-v",
+        "--versionid",
+        dest="versionid",
+        help="Object version id to retrieve metadata",
+    )
     metadata_parser.set_defaults(func=cmd_metadata_obj)
 
     # Upload file
@@ -519,17 +525,20 @@ class S3:
             "object_versions", bucket_name, prefix=prefix, limit=limit
         )
 
-    def metadata_object(self, bucket_name, object_name):
+    def metadata_object(self, bucket_name, object_name, version_id=None):
         """
         Return object metadata.
 
         Params:
             bucket_name           (str): Bucket name
             object_name           (str): Object key name
+            version_id            (str): Object version id
         """
-        return self.s3_resource.meta.client.head_object(
-            Bucket=bucket_name, Key=object_name
-        )
+        params = {"Bucket": bucket_name, "Key": object_name}
+        if version_id:
+            params["VersionId"] = version_id
+
+        return self.s3_resource.meta.client.head_object(**params)
 
     def delete_object(self, bucket_name, object_name, version_id=None):
         """
@@ -719,10 +728,17 @@ def cmd_metadata_obj(s3, args):
         msg("red", f"Error: Bucket '{args.bucket}' does not exist", 1)
 
     try:
-        pprint.pprint(s3.metadata_object(args.bucket, args.object))
+        pprint.pprint(s3.metadata_object(args.bucket, args.object, args.versionid))
     except botocore.exceptions.ClientError as error:
         if error.response["Error"]["Code"] == "404":
-            msg("red", f"Error: key '{args.object}' not found", 1)
+            if args.versionid:
+                msg(
+                    "red",
+                    f"Error: key '{args.object}' with version '{args.versionid}' not found",
+                    1,
+                )
+            else:
+                msg("red", f"Error: key '{args.object}' not found", 1)
         else:
             raise
 
