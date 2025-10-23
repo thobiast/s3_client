@@ -20,16 +20,15 @@ def test_cmd_upload_file(s3, tmp_filename):
         prefix="",
     )
     s3_client.log = Mock()
-    with patch.object(s3, "check_bucket_exist", return_value=True), patch(
-        "s3_client.s3_client.upload_file_to_s3"
+    with patch.object(s3, "check_bucket_exist", return_value=True), patch.object(
+        s3, "upload_file"
     ) as mock_upload:
         s3_client.cmd_upload(s3, args)
         mock_upload.assert_called_once()
         called_args, _ = mock_upload.call_args
-        assert called_args[0] == s3
-        assert called_args[1] == args.bucket
+        assert called_args[0] == args.bucket
+        assert called_args[1] == args.filename
         assert called_args[2] == args.filename
-        assert called_args[3] == args.filename
 
 
 def test_cmd_upload_directory(s3, tmp_filename):
@@ -45,16 +44,15 @@ def test_cmd_upload_directory(s3, tmp_filename):
         prefix="",
     )
     s3_client.log = Mock()
-    with patch.object(s3, "check_bucket_exist", return_value=True), patch(
-        "s3_client.s3_client.upload_file_to_s3"
+    with patch.object(s3, "check_bucket_exist", return_value=True), patch.object(
+        s3, "upload_file"
     ) as mock_upload:
         s3_client.cmd_upload(s3, args)
         called_args, _ = mock_upload.call_args
         assert mock_upload.call_count == 1
-        assert called_args[0] == s3
-        assert called_args[1] == args.bucket
+        assert called_args[0] == args.bucket
+        assert called_args[1] == tmp_filename
         assert called_args[2] == tmp_filename
-        assert called_args[3] == tmp_filename
 
 
 def test_cmd_upload_directory_two_files(s3, directory_with_two_files):
@@ -73,10 +71,10 @@ def test_cmd_upload_directory_two_files(s3, directory_with_two_files):
     )
 
     s3_client.log = Mock()
-    with patch.object(s3, "check_bucket_exist", return_value=True), patch(
-        "s3_client.s3_client.upload_file_to_s3"
+    with patch.object(s3, "check_bucket_exist", return_value=True), patch.object(
+        s3, "upload_file"
     ) as mock_upload:
         s3_client.cmd_upload(s3, args)
         assert mock_upload.call_count == 2
-        mock_upload.assert_any_call(s3, "test-bucket", str(file1), str(file1))
-        mock_upload.assert_any_call(s3, "test-bucket", str(file2), str(file2))
+        mock_upload.assert_any_call("test-bucket", str(file1), str(file1))
+        mock_upload.assert_any_call("test-bucket", str(file2), str(file2))

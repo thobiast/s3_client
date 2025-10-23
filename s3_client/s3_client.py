@@ -362,12 +362,29 @@ class Config:
 
 
 class RichProgressCallback:
+    """A callback handler to update a Rich progress bar."""
+
     def __init__(self, progress_obj, task_id):
+        """
+        Initializes the callback handler.
+
+        Params:
+            progress_obj (rich.progress.Progress): The Rich Progress instance to update.
+            task_id (rich.progress.TaskID): The task ID of the Progress
+                                            instance that this callback will modify.
+        """
         self._progress = progress_obj
         self._task_id = task_id
         self._lock = threading.Lock()
 
     def __call__(self, bytes_transferred):
+        """
+        The callback method invoked by boto3.
+
+        Params:
+            bytes_transferred (int): The number of bytes transferred
+                                     since the last call.
+        """
         with self._lock:
             self._progress.update(self._task_id, advance=bytes_transferred)
 
@@ -854,33 +871,6 @@ def cmd_list_obj(s3, args):
             msg("nocolor", "")
 
 
-##############################################################################
-# Upload a file to S3
-##############################################################################
-def upload_file_to_s3(s3, bucket_name, file_path, object_name):
-    """
-    Upload a single file to an S3 bucket.
-
-    Parameters:
-        s3 (S3): An instance of the S3 class.
-        bucket_name (str): The name of the S3 bucket where the file will be uploaded.
-        file_path (str): The path of the file on the local file system to upload.
-        object_name (str): The target object name in the S3 bucket. This is the name
-                           that will be used to store the file in the bucket.
-    """
-
-    msg("cyan", f"Uploading file {file_path} with object name {object_name}")
-
-    try:
-        s3.upload_file(bucket_name, file_path, object_name)
-    except PermissionError:
-        msg("red", f"Error: permission denied to read file {file_path}", 1)
-    except FileNotFoundError:
-        msg("red", f"Error: File '{file_path}' not found", 1)
-
-    msg("green", "  - Upload completed successfully")
-
-
 def upload_construct_object_name(file_path_str, prefix, nokeepdir):
     """
     Construct the object name for S3 upload, considering prefix and directory structure.
@@ -949,7 +939,20 @@ def cmd_upload(s3, args):
         object_name = upload_construct_object_name(
             str(file), args.prefix, args.nokeepdir
         )
-        upload_file_to_s3(s3, args.bucket, str(file), object_name)
+        file_path = str(file)
+        msg("cyan", f"Uploading file {file_path} with object name {object_name}")
+        try:
+            s3.upload_file(args.bucket, str(file), object_name)
+            msg("green", "  - Upload completed successfully")
+        except PermissionError:
+            msg("red", f"Error: permission denied to read file {file_path}")
+        except botocore.exceptions.UnseekableStreamError:
+            msg(
+                "red",
+                f"Error: could not rewind upload stream for '{file_path}'. Check file permissions.",
+            )
+        except FileNotFoundError:
+            msg("red", f"Error: File '{file_path}' not found")
 
 
 ##############################################################################
