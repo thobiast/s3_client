@@ -197,50 +197,31 @@ def parse_parameters():
     return parser.parse_args()
 
 
-def setup_logging(logfile=None, *, filemode="a", date_format=None, log_level="DEBUG"):
+def setup_logging(log_level, date_format=None):
     """
     Configure logging.
 
-    Arguments (opt):
-        logfile     (str): log file to write the log messages
-                               If not specified, it shows log messages
-                               on screen (stderr)
+    Arguments:
+        log_level   (int): Logging level constant (e.g., logging.DEBUG)
     Keyword arguments (opt):
-        filemode    (a/w): a - log messages are appended to the file (default)
-                           w - log messages overwrite the file
-        date_format (str): date format in strftime format
-                           default is %m/%d/%Y %H:%M:%S
-        log_level   (str): specifies the lowest-severity log message
-                           DEBUG, INFO, WARNING, ERROR or CRITICAL
-                           default is DEBUG
+        date_format (str): Date format in strftime format.
+                           Default: %Y-%m-%d %H:%M:%S
     """
-    dict_level = {
-        "DEBUG": logging.DEBUG,
-        "INFO": logging.INFO,
-        "WARNING": logging.WARNING,
-        "ERROR": logging.ERROR,
-        "CRITICAL": logging.CRITICAL,
-    }
-
-    if log_level not in dict_level:
-        raise ValueError("Invalid log_level")
-    if filemode not in ["a", "w"]:
-        raise ValueError("Invalid filemode")
-
     if not date_format:
-        date_format = "%m/%d/%Y %H:%M:%S"
+        date_format = "%Y-%m-%d %H:%M:%S"
 
     log_fmt = "%(asctime)s %(module)s %(funcName)s %(levelname)s %(message)s"
+    formatter = logging.Formatter(fmt=log_fmt, datefmt=date_format)
 
-    logging.basicConfig(
-        level=dict_level[log_level],
-        format=log_fmt,
-        datefmt=date_format,
-        filemode=filemode,
-        filename=logfile,
-    )
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(formatter)
 
-    return logging.getLogger(__name__)
+    root_logger = logging.getLogger()
+    if root_logger.hasHandlers():
+        root_logger.handlers.clear()
+
+    root_logger.setLevel(log_level)
+    root_logger.addHandler(handler)
 
 
 def msg(color, msg_text, exitcode=0, *, end="\n", flush=True, output=None):
@@ -447,11 +428,13 @@ class S3:
         """
         # If bucket was already checked, return it exists
         if bucket_name in self.buckets_exist:
-            log.debug("bucket %s was already checked, do not check again", bucket_name)
+            logging.debug(
+                "bucket %s was already checked, do not check again", bucket_name
+            )
             return True
 
         try:
-            log.debug("Checking if bucket exist: %s", bucket_name)
+            logging.debug("Checking if bucket exist: %s", bucket_name)
             self.s3_resource.meta.client.head_bucket(Bucket=bucket_name)
             self.buckets_exist.append(bucket_name)
             return True
@@ -595,7 +578,7 @@ class S3:
         if key_name is None:
             key_name = file_name
 
-        log.debug("Uploading file: %s with key: %s", file_name, key_name)
+        logging.debug("Uploading file: %s with key: %s", file_name, key_name)
 
         obj_size = Path(file_name).stat().st_size
         with progress.Progress(
@@ -626,7 +609,7 @@ class S3:
             dest_name              (str): Full path filename to store the object
             versionid             (str): Object version id
         """
-        log.debug("Downloading object %s to dest %s", object_name, dest_name)
+        logging.debug("Downloading object %s to dest %s", object_name, dest_name)
 
         if versionid:
             extraargs = {"VersionId": versionid}
@@ -641,7 +624,7 @@ class S3:
             extraargs = None
             obj_size = self.s3_resource.ObjectSummary(bucket_name, object_name).size
 
-        log.debug("obj_size: %s, extraargs: %s", obj_size, extraargs)
+        logging.debug("obj_size: %s, extraargs: %s", obj_size, extraargs)
 
         with progress.Progress(
             progress.TextColumn("[progress.description]{task.description}"),
@@ -994,7 +977,6 @@ def cmd_download(s3, args):
 ##############################################################################
 def main():
     """Command line execution."""
-    global log
 
     # Parser the command line
     args = parse_parameters()
@@ -1008,8 +990,9 @@ def main():
     logging.getLogger("urllib3").setLevel(logging.ERROR)
     urllib3.disable_warnings()
     # Configure log if --debug
-    log = setup_logging() if args.debug else logging
-    log.debug("CMD line args: %s", vars(args))
+    log_level = logging.DEBUG if args.debug else logging.WARNING
+    setup_logging(log_level)
+    logging.debug("CMD line args: %s", args)
 
     try:
         config = Config(
