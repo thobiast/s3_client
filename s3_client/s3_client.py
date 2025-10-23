@@ -266,7 +266,7 @@ def msg(color, msg_text, exitcode=0, *, end="\n", flush=True, output=None):
         if color not in color_dic:
             raise ValueError("Invalid color")
         print(
-            "{}{}{}".format(color_dic[color], msg_text, color_dic["resetcolor"]),
+            f"{color_dic[color]}{msg_text}{color_dic['resetcolor']}",
             end=end,
             file=output,
             flush=flush,
@@ -292,7 +292,7 @@ def time_elapsed(func):
         # keep track of total elapsed time for all execution of the function
         wrapped_f.elapsed += elapsed_time
 
-        output = "  - Elapsed time {:.4f} seconds".format(elapsed_time)
+        output = f"  - Elapsed time {elapsed_time:.4f} seconds"
         msg("nocolor", output)
 
         return result
@@ -725,13 +725,13 @@ def cmd_metadata_obj(s3, args):
     """Handle metadataobj option."""
     # Check if bucket exist
     if not s3.check_bucket_exist(args.bucket):
-        msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
+        msg("red", f"Error: Bucket '{args.bucket}' does not exist", 1)
 
     try:
         pprint.pprint(s3.metadata_object(args.bucket, args.object))
     except botocore.exceptions.ClientError as error:
         if error.response["Error"]["Code"] == "404":
-            msg("red", "Error: key '{}' not found".format(args.object), 1)
+            msg("red", f"Error: key '{args.object}' not found", 1)
         else:
             raise
 
@@ -743,7 +743,7 @@ def cmd_delete_obj(s3, args):
     """Handle delete object option."""
     # Check if bucket exist
     if not s3.check_bucket_exist(args.bucket):
-        msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
+        msg("red", f"Error: Bucket '{args.bucket}' does not exist", 1)
 
     resp = s3.delete_object(args.bucket, args.object, args.versionid)
     pprint.pprint(resp["Deleted"])
@@ -764,7 +764,7 @@ def cmd_list_buckets(s3, args):
         msg("nocolor", versioning)
         if args.acl:
             msg("cyan", "  acl: ")
-            msg("nocolor", "   {}".format(pprint.pformat(bucket.Acl().grants)))
+            msg("nocolor", f"   {pprint.pformat(bucket.Acl().grants)}")
 
 
 ##############################################################################
@@ -774,7 +774,7 @@ def cmd_list_obj(s3, args):
     """Handle listobj option."""
     # Check if bucket exist
     if not s3.check_bucket_exist(args.bucket):
-        msg("red", "Error: Bucket '{}' does not exist".format(args.bucket), 1)
+        msg("red", f"Error: Bucket '{args.bucket}' does not exist", 1)
 
     # Resource's attributes:
     base_attrs = ["key", "size", "storage_class", "e_tag", "last_modified"]
