@@ -396,7 +396,6 @@ class S3:
     Attributes:
         s3_resource (boto3.resource): The boto3 S3 resource object used to interact with S3.
         disable_pbar (bool): Flag to disable the progress bar display.
-        buckets_exist (list): A list to cache bucket existence checks.
     """
 
     def __init__(self, config, checksum_policy=None):
@@ -422,7 +421,6 @@ class S3:
             config=boto3_config,
         )
         self.disable_pbar = False
-        self.buckets_exist = []
 
     def check_bucket_exist(self, bucket_name):
         """
@@ -434,17 +432,9 @@ class S3:
         Return:
             bool: True if the bucket exists, False otherwise.
         """
-        # If bucket was already checked, return it exists
-        if bucket_name in self.buckets_exist:
-            logging.debug(
-                "bucket %s was already checked, do not check again", bucket_name
-            )
-            return True
-
         try:
             logging.debug("Checking if bucket exist: %s", bucket_name)
             self.s3_resource.meta.client.head_bucket(Bucket=bucket_name)
-            self.buckets_exist.append(bucket_name)
             return True
         except botocore.exceptions.ClientError as error:
             if error.response["Error"]["Code"] == "404":
@@ -791,6 +781,55 @@ def cmd_list_buckets(s3, args):
             msg("nocolor", f"   {pprint.pformat(bucket.Acl().grants)}")
 
 
+def bytes2human(size, *, unit="", precision=2, base=1024):
+    """
+    Convert number in bytes to human format.
+
+    Arguments:
+        size       (int): bytes to be converted
+
+    Keyword arguments (opt):
+        unit       (str):  The unit to convert to. Must be one of
+                           ['KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB']
+        precision  (int): number of digits after the decimal point
+        base       (int): Conversion base.
+                          Use 1000 - for decimal base
+                          Use 1024 - for binary base (default)
+
+    Returns:
+        tuple[str, str]: A tuple containing:
+            - The converted value as a formatted string (e.g., "1.25")
+            - The corresponding unit (e.g., "MB")
+    """
+    # validate parameters
+    if not isinstance(precision, int):
+        raise ValueError("precision is not a number")
+    if not isinstance(base, int):
+        raise ValueError("base is not a number")
+    try:
+        num = float(size)
+    except ValueError:
+        raise ValueError("value is not a number")
+
+    suffix = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB"]
+
+    # If it needs to convert bytes to a specific unit
+    if unit:
+        try:
+            num = num / base ** suffix.index(unit)
+        except ValueError:
+            raise ValueError(f"Error: unit must be {', '.join(suffix[1:])}")
+        return f"{num:.{precision}f}", unit
+
+    # Calculate the greatest unit for the that size
+    for counter, suffix_unit in enumerate(suffix):
+        if num < base:
+            return f"{num:.{precision}f}", suffix_unit
+        if counter == len(suffix) - 1:
+            raise ValueError("value greater than the highest unit")
+        num /= base
+
+
 ##############################################################################
 # Command to list all bucket's objects
 ##############################################################################
@@ -845,21 +884,10 @@ def cmd_list_obj(s3, args):
         for obj in objects:
             row_data = [str(getattr(obj, attr, "N/A")) for attr in attrs]
             table.add_row(*row_data)
-            size = getattr(obj, "size", 0)
-            total_size += size
+            size = getattr(obj, "size", None)
+            total_size += size or 0
 
-        def format_size(num_bytes):
-            """Converts bytes to a human-readable string."""
-            if num_bytes == 0:
-                return "0 Bytes"
-            units = ["Bytes", "KB", "MB", "GB", "TB", "PB"]
-            i = 0
-            while num_bytes >= 1024 and i < len(units) - 1:
-                num_bytes /= 1024
-                i += 1
-            return f"{num_bytes:.2f} {units[i]}"
-
-        readable_size = format_size(total_size)
+        readable_size = " ".join(bytes2human(total_size))
         table.caption = f"{table.row_count} object(s)  •  total size {readable_size}"
         console = Console()
         console.print(table)
