@@ -90,6 +90,13 @@ def parse_parameters():
     )
     listbuckets_parser.set_defaults(func=cmd_list_buckets)
 
+    # Delete bucket
+    deletebucket_parser = subparsers.add_parser(
+        "deletebucket", help="Delete an empty S3 bucket"
+    )
+    deletebucket_parser.add_argument("bucket", help="Bucket Name to delete")
+    deletebucket_parser.set_defaults(func=cmd_delete_bucket)
+
     # List objects
     list_parser = subparsers.add_parser("listobj", help="List objects in a bucket")
     list_parser.add_argument(
@@ -475,12 +482,15 @@ class S3:
             bucket_name (str): The name of the bucket to create.
             is_versioned (bool): Enable versioning if True.
         """
-        bucket = self.s3_resource.create_bucket(
-            Bucket=bucket_name,
-            CreateBucketConfiguration={
-                "LocationConstraint": self.s3_resource.meta.client.meta.region_name
-            },
-        )
+        region = self.s3_resource.meta.client.meta.region_name
+        if region and region != "us-east-1":
+            bucket = self.s3_resource.create_bucket(
+                Bucket=bucket_name,
+                CreateBucketConfiguration={"LocationConstraint": region},
+            )
+        else:
+            bucket = self.s3_resource.create_bucket(Bucket=bucket_name)
+
         bucket.wait_until_exists()
 
         if is_versioned:
@@ -499,6 +509,22 @@ class S3:
             A list of Bucket resources
         """
         return self.s3_resource.buckets.all()
+
+    def delete_bucket(self, bucket_name):
+        """
+        Delete an S3 bucket.
+        The bucket must be empty.
+
+        Params:
+            bucket_name (str): The name of the bucket to delete.
+        """
+        # Get the bucket resource object
+        bucket = self.s3_resource.Bucket(bucket_name)
+
+        result = bucket.delete()
+        logging.debug("Bucket delete response: %s", result)
+
+        bucket.wait_until_not_exists()
 
     def _list_objects(self, collection_type, bucket_name, *, prefix=None, limit=None):
         """
@@ -813,14 +839,57 @@ def cmd_create_bucket(s3, args):
     try:
         s3.create_bucket(args.bucket, args.versioned)
 
-        msg("green", f"Successfully created bucket '{args.bucket}'.")
+        msg("green", f"Successfully created bucket '{args.bucket}'")
         if args.versioned:
-            msg("green", f"  - Versioning enabled for '{args.bucket}'.")
+            msg("green", f"  - Versioning enabled for '{args.bucket}'")
 
     except botocore.exceptions.ClientError as error:
         msg("red", f"Error creating bucket: {error}", 1)
     except Exception as error:
         msg("red", f"An unexpected error occurred: {error}", 1)
+
+
+##############################################################################
+# Command to delete a bucket
+##############################################################################
+def cmd_delete_bucket(s3, args):
+    """Handle deletebucket option."""
+
+    if not s3.check_bucket_exist(args.bucket):
+        msg("red", f"Error: Bucket '{args.bucket}' not found", 1)
+
+    # --- confirmation
+    msg("red", f"!!! WARNING: This will permanently delete the bucket '{args.bucket}'")
+    msg("red", "The bucket must be empty to be deleted")
+    msg("yellow", f"To confirm, please type the bucket name ('{args.bucket}') again:")
+
+    try:
+        confirmation = input("> ")
+    except (EOFError, KeyboardInterrupt):
+        msg("cyan", "\nDeletion cancelled.", 1)
+        return
+
+    if confirmation != args.bucket:
+        msg("red", "Bucket name confirmation mismatch. Bucket deletion cancelled.", 1)
+        return
+    # --- end confirmation ---
+
+    msg("cyan", f"Proceeding with deletion of '{args.bucket}'...")
+
+    try:
+        s3.delete_bucket(args.bucket)
+        msg("green", f"Successfully deleted bucket '{args.bucket}'")
+
+    except botocore.exceptions.ClientError as error:
+        error_code = error.response["Error"]["Code"]
+        if error_code == "BucketNotEmpty":
+            msg("red", f"Error: Bucket '{args.bucket}' is not empty", 1)
+        elif error_code == "NoSuchBucket":
+            msg("red", f"Error: Bucket '{args.bucket}' not found", 1)
+        else:
+            msg("red", f"Error deleting bucket: {error}", 1)
+    except Exception as e:
+        msg("red", f"An unexpected error occurred: {e}", 1)
 
 
 ##############################################################################
