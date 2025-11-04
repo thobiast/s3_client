@@ -70,6 +70,19 @@ def parse_parameters():
     # Add subcommands options
     subparsers = parser.add_subparsers(title="Commands", dest="command")
 
+    # Create bucket
+    createbucket_parser = subparsers.add_parser(
+        "createbucket", help="Create a new bucket"
+    )
+    createbucket_parser.add_argument("bucket", help="Bucket Name to create")
+    createbucket_parser.add_argument(
+        "-v",
+        "--versioned",
+        action="store_true",
+        help="Enable versioning on the new bucket (default: %(default)s)",
+    )
+    createbucket_parser.set_defaults(func=cmd_create_bucket)
+
     # List buckets
     listbuckets_parser = subparsers.add_parser("listbuckets", help="List all buckets")
     listbuckets_parser.add_argument(
@@ -454,6 +467,30 @@ class S3:
         """
         return self.s3_resource.BucketVersioning(bucket_name).status
 
+    def create_bucket(self, bucket_name, is_versioned=False):
+        """
+        Create a new S3 bucket.
+
+        Params:
+            bucket_name (str): The name of the bucket to create.
+            is_versioned (bool): Enable versioning if True.
+        """
+        bucket = self.s3_resource.create_bucket(
+            Bucket=bucket_name,
+            CreateBucketConfiguration={
+                "LocationConstraint": self.s3_resource.meta.client.meta.region_name
+            },
+        )
+        bucket.wait_until_exists()
+
+        if is_versioned:
+            logging.info(f"Enabling versioning for '{bucket_name}'")
+            output = bucket.Versioning().enable()
+            logging.debug(output)
+            logging.info("Versioning enabled")
+
+        return bucket
+
     def list_buckets(self):
         """
         List all buckets.
@@ -761,6 +798,29 @@ def cmd_delete_obj(s3, args):
 
     resp = s3.delete_object(args.bucket, args.object, args.versionid)
     pprint.pprint(resp)
+
+
+##############################################################################
+# Command to create a bucket
+##############################################################################
+def cmd_create_bucket(s3, args):
+    """Handle createbucket option."""
+    msg("cyan", f"Attempting to create bucket '{args.bucket}'...")
+
+    if s3.check_bucket_exist(args.bucket):
+        msg("red", f"Error: Bucket '{args.bucket}' already exists", 1)
+
+    try:
+        s3.create_bucket(args.bucket, args.versioned)
+
+        msg("green", f"Successfully created bucket '{args.bucket}'.")
+        if args.versioned:
+            msg("green", f"  - Versioning enabled for '{args.bucket}'.")
+
+    except botocore.exceptions.ClientError as error:
+        msg("red", f"Error creating bucket: {error}", 1)
+    except Exception as error:
+        msg("red", f"An unexpected error occurred: {error}", 1)
 
 
 ##############################################################################
