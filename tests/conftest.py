@@ -4,7 +4,7 @@ import boto3
 import moto
 import pytest
 
-from s3_client import s3_client
+from s3_client import s3_core
 
 BUCKET_NAME = "my_bucket"
 BUCKET_NAME_NOT_EXIST = "my_bucket_does_not_exist"
@@ -16,11 +16,11 @@ REGION_NAME = "us-east-1"
 
 
 @pytest.fixture(scope="function")
-def s3():
+def s3manager():
     with moto.mock_aws():
-        config = s3_client.Config()
-        s3_instance = s3_client.S3(config)
-        yield s3_instance
+        config = s3_core.Config()
+        s3manager_instance = s3_core.S3Manager(config)
+        yield s3manager_instance
 
 
 @pytest.fixture(scope="function")
@@ -39,11 +39,6 @@ def s3_objects():
         for key_name in KEY_NAMES:
             conn.meta.client.put_object(Bucket=BUCKET_NAME, Key=key_name, Body="body")
         yield conn
-
-
-@pytest.fixture(scope="function")
-def download():
-    return s3_client.Download("s3", "my_bucket", ".")
 
 
 @pytest.fixture(scope="function")
