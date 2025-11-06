@@ -85,7 +85,10 @@ def parse_parameters():
     # List buckets
     listbuckets_parser = subparsers.add_parser("listbuckets", help="List all buckets")
     listbuckets_parser.add_argument(
-        "--acl", default=False, action="store_true", help="Show ACL information"
+        "--acl",
+        default=False,
+        action="store_true",
+        help="Show ACL information. (default: %(default)s)",
     )
     listbuckets_parser.set_defaults(func=cmd_list_buckets)
 
@@ -104,7 +107,7 @@ def parse_parameters():
         type=int,
         required=False,
         default=None,
-        help="Limit the number of objects returned",
+        help="Limit the number of objects returned. (default: %(default)s)",
     )
     list_parser.add_argument(
         "-t", "--table", action="store_true", help="Show output as table"
@@ -152,13 +155,16 @@ def parse_parameters():
     upload_parser.add_argument(
         "--nopbar",
         action="store_true",
-        help="Disable progress bar",
+        help="Disable progress bar. (default: %(default)s)",
     )
     upload_parser.add_argument(
         "--nokeepdir",
         default=False,
         action="store_true",
-        help="Do not keep local directory structure on uploaded objects names",
+        help=(
+            "Do not keep local directory structure on uploaded objects names. "
+            "(default: %(default)s)"
+        ),
     )
     upload_parser.add_argument(
         "-p",
@@ -182,20 +188,20 @@ def parse_parameters():
     download_parser.add_argument(
         "--nopbar",
         action="store_true",
-        help="Disable progress bar",
+        help="Disable progress bar. (default: %(default)s)",
     )
     download_parser.add_argument(
         "-l",
         "--localdir",
         default=".",
         dest="localdir",
-        help="Local directory to save downloaded file. Default current directory",
+        help="Local directory to save downloaded file. Default current directory.",
     )
     download_parser.add_argument(
         "-o",
         "--overwrite",
         action="store_true",
-        help="Overwrite local destination file if it exists. Default false",
+        help="Overwrite local destination file if it exists. (default: %(default)s)",
     )
     download_parser.add_argument(
         "-v",
