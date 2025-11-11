@@ -10,7 +10,7 @@ authors = [
 ]
 
 [project.scripts]
-s3-client = "s3_client.s3_client:main"
+s3-client = "s3_client.main:main"
 
 [project.urls]
 "Homepage" = "https://github.com/thobiast/s3_client"
@@ -30,5 +30,7 @@ dependencies = {file = ["requirements.txt"]}
 [tool.black]
 line-length = 88
 
-[tool.pylint]
+[tool.pylint.main]
 max-line-length = 88
+ignore-paths = ["tests/"]
+disable = ["W0718"]

@@ -7,45 +7,71 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 
-This Python script provides a simple command-line interface (CLI) to interact with AWS S3 services, allowing you to perform operations like listing buckets, uploading/downloading files, and more.
+`s3-client` is a Python command-line tool for interacting with AWS S3 and other S3-compatible services such as MinIO or Ceph.
+It supports common operations such as listing buckets, uploading, downloading, and managing objects.
 
 
 ## Installation
+
+Install from PyPI:
 
 ```bash
 pip install s3-client
 ```
 
-Or, clone the repository and install from source:
+Or, clone the repository and install from source in development mode:
 
-#### Install in development mode using pip
 ```bash
-$ pip install -e .
+git clone https://github.com/thobiast/s3_client.git
+cd s3_client
+pip install -e .
 ```
+You can also use **pipx** to install it in an isolated environment:
 
-#### Install in development mode using pipx
 ```bash
-$ pipx install -e .
+pipx install -e .
 ```
 
 ## Configuration
 
-This script uses environment variables or AWS profile for authorization.
+`s3-client` authenticates using either environment variables or an AWS profile.
 
-To use environment variables, provide your credentials as follows:
+#### Option 1: Environment variables
+
+Set these variables in your shell:
 
 - **AWS_ACCESS_KEY_ID**: Specifies an AWS access key associated with an IAM user or role.
 - **AWS_SECRET_ACCESS_KEY**: Specifies the secret key associated with the access key. This is essentially the "password" for the access key.
 
-Alternatively, use the '**--profile**' option to specify the AWS profile configured in your AWS
-credentials file (usually located at '**~/.aws/credentials**'). This is useful if you have multiple
-AWS accounts or configurations.
+```bash
+export AWS_ACCESS_KEY_ID=<your-access-key>
+export AWS_SECRET_ACCESS_KEY=<your-secret-key>
+s3-client listbuckets
+```
+
+#### Option 2: AWS profiles
+
+Use the '**--profile**' option to specify the AWS profile configured in your AWS
+credentials file (usually located at '**~/.aws/credentials**').
+
+```bash
+# Example using a profile named 'dev'
+s3-client --profile dev listbuckets
+```
+
+You may also specify:
+
+- **--endpoint**: S3-compatible endpoint (e.g., MinIO, Ceph, or custom URL)
+- **--region**: AWS region
 
 ## Usage:
 
 ```bash
-$ s3-client
-usage: s3-client [-h] [-d] [-e ENDPOINT] [-r REGION_NAME] [--profile AWS_PROFILE] {listbuckets,listobj,deleteobj,metadataobj,upload,download} ...
+$ s3-client --help
+usage: s3-client [-h] [-d] [-e ENDPOINT] [-r REGION_NAME] [--profile AWS_PROFILE]
+                 [--checksum-policy {when_supported,when_required}]
+                 {createbucket,listbuckets,deletebucket,listobj,deleteobj,metadataobj,upload,download}
+                 ...
 
 S3 Client sample script
 
@@ -58,10 +84,15 @@ options:
                         S3 Region Name
   --profile AWS_PROFILE
                         AWS profile to use
+  --checksum-policy {when_supported,when_required}
+                        Apply checksum setting to both request and response. Valid:
+                        when_supported, when_required. (default: None)
 
 Commands:
-  {listbuckets,listobj,deleteobj,metadataobj,upload,download}
+  {createbucket,listbuckets,deletebucket,listobj,deleteobj,metadataobj,upload,download}
+    createbucket        Create a new bucket
     listbuckets         List all buckets
+    deletebucket        Delete an empty S3 bucket
     listobj             List objects in a bucket
     deleteobj           Delete object in a bucket
     metadataobj         List object metadata
@@ -76,6 +107,27 @@ Commands:
         s3-client -e https://s3.amazonaws.com upload my_bucket -f file1
         s3-client -e https://s3.amazonaws.com upload my_bucket -d mydir
 ```
+
+You can use the `--help` option with any command to view its help message.
+
+```bash
+$ s3-client listobj -h
+usage: s3-client listobj [-h] [-l LIMIT] [-t] [-p PREFIX] [-v] bucket
+
+positional arguments:
+  bucket                Bucket Name
+
+options:
+  -h, --help            show this help message and exit
+  -l LIMIT, --limit LIMIT
+                        Limit the number of objects returned. (default: None)
+  -t, --table           Show output as table
+  -p PREFIX, --prefix PREFIX
+                        Only objects with specific prefix
+  -v, --versions        Show all object versions
+```
+
+Below are a few common usage examples.
 
 ### Example:
 
@@ -118,24 +170,6 @@ Uploading file mydir/internal/deep/test5 with object name mydir/internal/deep/te
 #### List objects in a bucket
 
 ```bash
-$ s3-client listobj -h
-usage: s3-client listobj [-h] [-l LIMIT] [-t] [-p PREFIX] [-v] bucket
-
-positional arguments:
-  bucket                Bucket Name
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -l LIMIT, --limit LIMIT
-                        Limit the number of objects returned
-  -t, --table           Show output as table
-  -p PREFIX, --prefix PREFIX
-                        Only objects with specific prefix
-  -v, --versions        Show all object versions
-```
-
-
-```bash
 $ s3-client -e https://s3.amazonaws.com listobj my_bucket
 key: mydir/internal/deep/test4 size: 10 storage_class: STANDARD e_tag: "d41d8cd98f00b204e9800998ecf8427e" last_modified: 2020-08-21 16:40:42.790000+00:00
 key: mydir/internal/deep/test5 size: 203 storage_class: STANDARD e_tag: "7c41d8cd98f00b204e9800998ecf8427" last_modified: 2020-08-21 16:40:42.894000+00:00
@@ -157,20 +191,24 @@ $ s3-client -e https://s3.amazonaws.com listobj my_bucket -t
 #### Download objects
 
 ```bash
-$ s3-client -e https://s3.amazonaws.com download -h
-usage: s3-client download [-h] [--nopbar] [-l LOCALDIR] [-o] [-v VERSIONID] (-f FILENAME | -p PREFIX) bucket
+$ s3-client download -h
+usage: s3-client download [-h] [--nopbar] [-l LOCALDIR] [-o] [-v VERSIONID]
+                          (-f FILENAME | -p PREFIX)
+                          bucket
 
 positional arguments:
   bucket                Bucket Name
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
-  --nopbar              Disable progress bar
+  --nopbar              Disable progress bar. (default: False)
   -l LOCALDIR, --localdir LOCALDIR
-                        Local directory to save downloaded file. Default current directory
-  -o, --overwrite       Overwrite local destination file if it exists. Default false
+                        Local directory to save downloaded file. Default
+                        current directory.
+  -o, --overwrite       Overwrite local destination file if it exists.
+                        (default: False)
   -v VERSIONID, --versionid VERSIONID
-                        Object version id
+                        Object version ID
   -f FILENAME, --file FILENAME
                         Download a specific file
   -p PREFIX, --prefix PREFIX

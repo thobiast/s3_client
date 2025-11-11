@@ -3,7 +3,7 @@
 
 import pytest
 
-from s3_client import s3_client
+from s3_client import main
 
 
 @pytest.mark.parametrize(
@@ -18,5 +18,5 @@ from s3_client import s3_client
     ],
 )
 def test_upload_construct_object_name(file_path, prefix, nokeepdir, expected):
-    object_name = s3_client.upload_construct_object_name(file_path, prefix, nokeepdir)
+    object_name = main.upload_construct_object_name(file_path, prefix, nokeepdir)
     assert object_name == expected

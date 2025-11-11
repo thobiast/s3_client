@@ -1,5 +1,4 @@
 boto3
 botocore
-tabulate
 urllib3
-tqdm
+rich
